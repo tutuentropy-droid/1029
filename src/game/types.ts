@@ -87,6 +87,67 @@ export interface GameConfig {
   friction: number;
 }
 
+export type NPCBehavior = 'printer_fish' | 'ceiling_meeting' | 'backwards_boss' | 'floating_coffee' | 'typewriter_birds';
+
+export interface NPCFish {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  rotation: number;
+  life: number;
+}
+
+export interface NPC {
+  x: number;
+  y: number;
+  behavior: NPCBehavior;
+  animTime: number;
+  facing: Facing;
+  fishes: NPCFish[];
+  fishSpawnTimer: number;
+  birds: NPCFish[];
+  birdSpawnTimer: number;
+  walkTimer: number;
+  meetingBobPhase: number;
+}
+
+export interface CameraState {
+  offsetX: number;
+  offsetY: number;
+  shakeIntensity: number;
+  shakeTimer: number;
+  panTargetX: number;
+  panTargetY: number;
+  panSpeed: number;
+  isPanning: boolean;
+  zoomLevel: number;
+  zoomTarget: number;
+  zoomSpeed: number;
+  isZooming: boolean;
+}
+
+export interface CutsceneMoment {
+  id: string;
+  triggerTime: number;
+  duration: number;
+  panTo: { x: number; y: number } | null;
+  zoomTo: number | null;
+  shakeIntensity: number;
+  message: string;
+  messageDuration: number;
+  triggered: boolean;
+  finished: boolean;
+}
+
+export interface CutsceneState {
+  moments: CutsceneMoment[];
+  activeMoment: CutsceneMoment | null;
+  messageText: string;
+  messageTimer: number;
+  messageAlpha: number;
+}
+
 export interface InputState {
   left: boolean;
   right: boolean;

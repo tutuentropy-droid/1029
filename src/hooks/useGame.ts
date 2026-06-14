@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import type { GameState, InputState, Level, Player, DreamRule, DreamRuleState } from '@/game/types';
+import type { GameState, InputState, Level, Player, DreamRule, DreamRuleState, NPC, CameraState, CutsceneState } from '@/game/types';
 import { createLevel } from '@/game/level';
 import { createPlayer, updatePlayerAnimation } from '@/game/Player';
 import { checkCollectibles, checkExit, updateCollectibles, updatePlayerPhysics } from '@/game/physics';
 import { GameRenderer } from '@/game/renderer';
 import { selectRandomDreamRule, createDreamRuleState, updateDreamRule } from '@/game/dreamRules';
+import { createNPCs, updateNPC, createCamera, updateCamera, createCutsceneState, updateCutscene } from '@/game/npc';
 
 interface UseGameReturn {
   canvasRef: React.RefObject<HTMLCanvasElement>;
@@ -40,6 +41,9 @@ export function useGame(): UseGameReturn {
   const lastTimeRef = useRef<number>(0);
   const gameTimeRef = useRef<number>(0);
   const dreamStateRef = useRef<DreamRuleState | null>(null);
+  const npcsRef = useRef<NPC[]>([]);
+  const cameraRef = useRef<CameraState>(createCamera());
+  const cutsceneRef = useRef<CutsceneState | null>(null);
 
   const initGame = () => {
     const level = createLevel();
@@ -54,6 +58,10 @@ export function useGame(): UseGameReturn {
     const rule = selectRandomDreamRule();
     setCurrentRule(rule);
     dreamStateRef.current = createDreamRuleState(rule, level);
+
+    npcsRef.current = createNPCs();
+    cameraRef.current = createCamera();
+    cutsceneRef.current = createCutsceneState();
   };
 
   const startGame = () => {
@@ -143,6 +151,9 @@ export function useGame(): UseGameReturn {
       const level = levelRef.current;
       const renderer = rendererRef.current;
       const dreamState = dreamStateRef.current;
+      const npcs = npcsRef.current;
+      const camera = cameraRef.current;
+      const cutscene = cutsceneRef.current;
 
       if (player && level && renderer) {
         if (gameStateRef.current === 'playing') {
@@ -155,6 +166,16 @@ export function useGame(): UseGameReturn {
           updatePlayerPhysics(player, level.platforms, inputRef.current, dt, dreamState, level);
           updatePlayerAnimation(player, dt);
           updateCollectibles(level.collectibles, dt, gameTimeRef.current);
+
+          for (const npc of npcs) {
+            updateNPC(npc, dt);
+          }
+
+          updateCamera(camera, dt);
+
+          if (cutscene) {
+            updateCutscene(cutscene, camera, gameTimeRef.current, dt);
+          }
 
           const collected = checkCollectibles(player, level.collectibles);
           if (collected > 0) {
@@ -171,7 +192,7 @@ export function useGame(): UseGameReturn {
           inputRef.current.jumpPressed = false;
         }
 
-        renderer.render(level, player, collectedRef.current, totalRef.current, gameTimeRef.current, dreamState);
+        renderer.render(level, player, collectedRef.current, totalRef.current, gameTimeRef.current, dreamState, npcs, camera, cutscene);
       }
 
       animationFrameRef.current = requestAnimationFrame(gameLoop);

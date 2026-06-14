@@ -1,4 +1,4 @@
-import type { Player, Platform, Collectible, ExitDoor, Level, DreamRuleState } from './types';
+import type { Player, Platform, Collectible, ExitDoor, Level, DreamRuleState, NPC, CameraState, CutsceneState } from './types';
 import { COLORS, CANVAS_WIDTH, CANVAS_HEIGHT } from './config';
 import { getWalkPhase, getIdleBob, getWalkBob } from './Player';
 import { isPlatformVisible } from './dreamRules';
@@ -11,7 +11,7 @@ export class GameRenderer {
     this.ctx = ctx;
   }
 
-  render(level: Level, player: Player, collectedCount: number, totalCount: number, time: number, dreamState: DreamRuleState | null): void {
+  render(level: Level, player: Player, collectedCount: number, totalCount: number, time: number, dreamState: DreamRuleState | null, npcs: NPC[], camera: CameraState, cutscene: CutsceneState | null): void {
     this.time = time;
     const ctx = this.ctx;
 
@@ -25,6 +25,13 @@ export class GameRenderer {
 
     this.drawBackground();
     this.drawWallDecorations();
+
+    ctx.save();
+    this.applyCameraTransform(camera);
+
+    for (const npc of npcs) {
+      this.drawNPC(npc);
+    }
 
     for (let i = 0; i < level.platforms.length; i++) {
       const platform = level.platforms[i];
@@ -45,6 +52,8 @@ export class GameRenderer {
 
     this.drawPlayer(player);
 
+    ctx.restore();
+
     if (dreamState && dreamState.rule.type === 'gravity_flip' && dreamState.gravityDir < 0) {
       ctx.restore();
     }
@@ -52,6 +61,17 @@ export class GameRenderer {
     if (dreamState) {
       this.drawDreamRuleOverlay(dreamState);
     }
+
+    if (cutscene) {
+      this.drawCutsceneMessage(cutscene);
+    }
+  }
+
+  private applyCameraTransform(camera: CameraState): void {
+    const ctx = this.ctx;
+    ctx.translate(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
+    ctx.scale(camera.zoomLevel, camera.zoomLevel);
+    ctx.translate(-CANVAS_WIDTH / 2 + camera.offsetX, -CANVAS_HEIGHT / 2 + camera.offsetY);
   }
 
   private drawBackground(): void {
@@ -729,6 +749,483 @@ export class GameRenderer {
     ctx.font = '12px sans-serif';
     ctx.textAlign = 'right';
     ctx.fillText('🌊 地板在移动...', CANVAS_WIDTH - 15, 25);
+    ctx.restore();
+  }
+
+  private drawCutsceneMessage(cutscene: CutsceneState): void {
+    if (!cutscene.messageText || cutscene.messageAlpha <= 0) return;
+    const ctx = this.ctx;
+
+    ctx.save();
+    ctx.globalAlpha = cutscene.messageAlpha;
+
+    const msgY = CANVAS_HEIGHT - 80;
+    const padding = 20;
+    ctx.font = 'bold 18px "Comic Sans MS", cursive, sans-serif';
+    ctx.textAlign = 'center';
+    const textWidth = ctx.measureText(cutscene.messageText).width;
+
+    ctx.fillStyle = 'rgba(30, 10, 60, 0.75)';
+    const rx = CANVAS_WIDTH / 2 - textWidth / 2 - padding;
+    const ry = msgY - 16;
+    const rw = textWidth + padding * 2;
+    const rh = 40;
+    ctx.beginPath();
+    ctx.moveTo(rx + 8, ry);
+    ctx.lineTo(rx + rw - 8, ry);
+    ctx.quadraticCurveTo(rx + rw, ry, rx + rw, ry + 8);
+    ctx.lineTo(rx + rw, ry + rh - 8);
+    ctx.quadraticCurveTo(rx + rw, ry + rh, rx + rw - 8, ry + rh);
+    ctx.lineTo(rx + 8, ry + rh);
+    ctx.quadraticCurveTo(rx, ry + rh, rx, ry + rh - 8);
+    ctx.lineTo(rx, ry + 8);
+    ctx.quadraticCurveTo(rx, ry, rx + 8, ry);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.strokeStyle = 'rgba(200, 150, 255, 0.6)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.fillStyle = '#E8D5FF';
+    ctx.fillText(cutscene.messageText, CANVAS_WIDTH / 2, msgY + 6);
+
+    ctx.restore();
+  }
+
+  private drawNPC(npc: NPC): void {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.globalAlpha = 0.7;
+
+    switch (npc.behavior) {
+      case 'printer_fish':
+        this.drawPrinterFishNPC(npc);
+        break;
+      case 'ceiling_meeting':
+        this.drawCeilingMeetingNPC(npc);
+        break;
+      case 'backwards_boss':
+        this.drawBackwardsBossNPC(npc);
+        break;
+      case 'floating_coffee':
+        this.drawFloatingCoffeeNPC(npc);
+        break;
+      case 'typewriter_birds':
+        this.drawTypewriterBirdsNPC(npc);
+        break;
+    }
+
+    ctx.restore();
+  }
+
+  private drawPrinterFishNPC(npc: NPC): void {
+    const ctx = this.ctx;
+    const px = npc.x;
+    const py = npc.y;
+
+    ctx.fillStyle = '#7A7A7A';
+    ctx.strokeStyle = COLORS.outline;
+    ctx.lineWidth = 1.5;
+    ctx.fillRect(px - 15, py - 25, 30, 20);
+    ctx.strokeRect(px - 15, py - 25, 30, 20);
+
+    ctx.fillStyle = '#999';
+    ctx.fillRect(px - 12, py - 5, 24, 8);
+    ctx.strokeRect(px - 12, py - 5, 24, 8);
+
+    ctx.fillStyle = '#5A5A5A';
+    ctx.fillRect(px - 10, py - 22, 20, 3);
+
+    ctx.fillStyle = '#E0E0E0';
+    const paperWiggle = Math.sin(this.time * 6) * 2;
+    ctx.fillRect(px - 8 + paperWiggle, py - 38, 16, 14);
+    ctx.strokeRect(px - 8 + paperWiggle, py - 38, 16, 14);
+
+    ctx.strokeStyle = 'rgba(100,100,100,0.5)';
+    ctx.lineWidth = 0.8;
+    for (let i = 0; i < 3; i++) {
+      ctx.beginPath();
+      ctx.moveTo(px - 6 + paperWiggle, py - 34 + i * 4);
+      ctx.lineTo(px + 4 + paperWiggle, py - 34 + i * 4);
+      ctx.stroke();
+    }
+
+    for (const fish of npc.fishes) {
+      this.drawFish(fish.x, fish.y, fish.rotation, fish.life);
+    }
+  }
+
+  private drawFish(x: number, y: number, rotation: number, life: number): void {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(rotation);
+    ctx.globalAlpha = Math.min(1, life);
+
+    ctx.fillStyle = '#4FC3F7';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 8, 5, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(7, 0);
+    ctx.lineTo(13, -5);
+    ctx.lineTo(13, 5);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = '#039BE5';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 8, 3, 0, 0, Math.PI);
+    ctx.fill();
+
+    ctx.fillStyle = 'white';
+    ctx.beginPath();
+    ctx.arc(-3, -1, 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#1A1A1A';
+    ctx.beginPath();
+    ctx.arc(-2.5, -1, 1, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  private drawCeilingMeetingNPC(npc: NPC): void {
+    const ctx = this.ctx;
+    const cx = npc.x;
+    const cy = npc.y;
+    const bob = Math.sin(npc.meetingBobPhase) * 3;
+
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(1, -1);
+
+    for (let i = 0; i < 3; i++) {
+      const ox = (i - 1) * 30;
+      const personBob = Math.sin(npc.meetingBobPhase + i * 1.2) * 2;
+
+      ctx.save();
+      ctx.translate(ox, personBob + bob);
+
+      ctx.fillStyle = '#5D4E37';
+      ctx.strokeStyle = COLORS.outline;
+      ctx.lineWidth = 1;
+
+      ctx.fillRect(-6, 0, 12, 14);
+      ctx.strokeRect(-6, 0, 12, 14);
+
+      ctx.fillStyle = COLORS.playerSkin;
+      ctx.beginPath();
+      ctx.arc(0, -4, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = '#333';
+      ctx.beginPath();
+      ctx.arc(0, -6, 5, Math.PI, 0);
+      ctx.fill();
+
+      ctx.save();
+      ctx.translate(-7, 2);
+      ctx.rotate(-0.3 + Math.sin(npc.animTime * 2 + i) * 0.2);
+      ctx.fillStyle = '#5D4E37';
+      ctx.fillRect(-2, 0, 4, 10);
+      ctx.restore();
+
+      ctx.save();
+      ctx.translate(7, 2);
+      ctx.rotate(0.3 + Math.sin(npc.animTime * 2 + i + 1) * 0.2);
+      ctx.fillStyle = '#5D4E37';
+      ctx.fillRect(-2, 0, 4, 10);
+      ctx.restore();
+
+      ctx.fillStyle = COLORS.outline;
+      ctx.beginPath();
+      ctx.arc(-2, -4, 1, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(2, -4, 1, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
+    }
+
+    ctx.fillStyle = '#8B4513';
+    ctx.strokeStyle = COLORS.outline;
+    ctx.lineWidth = 1.5;
+    ctx.fillRect(-22, 18, 44, 5);
+    ctx.strokeRect(-22, 18, 44, 5);
+
+    const speechBob = Math.sin(npc.animTime * 3) * 1;
+    ctx.fillStyle = 'rgba(255,255,255,0.8)';
+    ctx.font = '8px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('💬', 0, -20 + speechBob);
+
+    ctx.restore();
+  }
+
+  private drawBackwardsBossNPC(npc: NPC): void {
+    const ctx = this.ctx;
+    const bx = npc.x;
+    const by = npc.y;
+    const walkPhase = (npc.animTime * 5) % (Math.PI * 2);
+
+    ctx.save();
+    ctx.translate(bx, by);
+
+    const facingDir = npc.facing === 'left' ? 1 : -1;
+    ctx.scale(facingDir, 1);
+
+    const bodyH = 18;
+    const headR = 7;
+    const headY = -bodyH - headR - 2;
+
+    const legH = 10;
+    const legW = 4;
+    const leftLegAngle = Math.sin(walkPhase) * 0.4;
+    const rightLegAngle = Math.sin(walkPhase + Math.PI) * 0.4;
+
+    ctx.save();
+    ctx.translate(-3, 0);
+    ctx.rotate(leftLegAngle);
+    ctx.fillStyle = '#1A1A1A';
+    ctx.strokeStyle = COLORS.outline;
+    ctx.lineWidth = 1;
+    ctx.fillRect(-legW / 2, 0, legW, legH);
+    ctx.strokeRect(-legW / 2, 0, legW, legH);
+    ctx.restore();
+
+    ctx.save();
+    ctx.translate(3, 0);
+    ctx.rotate(rightLegAngle);
+    ctx.fillStyle = '#1A1A1A';
+    ctx.fillRect(-legW / 2, 0, legW, legH);
+    ctx.strokeRect(-legW / 2, 0, legW, legH);
+    ctx.restore();
+
+    ctx.fillStyle = '#2C2C2C';
+    ctx.strokeStyle = COLORS.outline;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(-8, -bodyH);
+    ctx.lineTo(8, -bodyH);
+    ctx.lineTo(7, 0);
+    ctx.lineTo(-7, 0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#FFD700';
+    ctx.fillRect(-4, -bodyH + 2, 8, 2);
+
+    ctx.save();
+    ctx.translate(-8, -bodyH + 3);
+    ctx.rotate(Math.sin(walkPhase + Math.PI) * 0.3);
+    ctx.fillStyle = '#2C2C2C';
+    ctx.fillRect(-2, 0, 4, 8);
+    ctx.restore();
+
+    ctx.save();
+    ctx.translate(8, -bodyH + 3);
+    ctx.rotate(Math.sin(walkPhase) * 0.3);
+    ctx.fillStyle = '#2C2C2C';
+    ctx.fillRect(-2, 0, 4, 8);
+    ctx.restore();
+
+    ctx.fillStyle = COLORS.playerSkin;
+    ctx.beginPath();
+    ctx.arc(0, headY, headR, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = COLORS.outline;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    ctx.fillStyle = '#555';
+    ctx.beginPath();
+    ctx.ellipse(0, headY - headR + 1, headR + 2, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = COLORS.outline;
+    const eyeY = headY - 1;
+    ctx.fillRect(-4, eyeY - 1, 2, 2);
+    ctx.fillRect(2, eyeY - 1, 2, 2);
+
+    ctx.strokeStyle = '#888';
+    ctx.lineWidth = 0.8;
+    ctx.beginPath();
+    ctx.moveTo(-5, eyeY - 3);
+    ctx.lineTo(-2, eyeY - 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(5, eyeY - 3);
+    ctx.lineTo(2, eyeY - 2);
+    ctx.stroke();
+
+    ctx.strokeStyle = COLORS.outline;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(0, headY + 4, 2, 0.2, Math.PI - 0.2);
+    ctx.stroke();
+
+    ctx.fillStyle = 'rgba(255,215,0,0.6)';
+    ctx.font = 'bold 8px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('👑', 0, headY - headR - 6);
+
+    ctx.restore();
+  }
+
+  private drawFloatingCoffeeNPC(npc: NPC): void {
+    const ctx = this.ctx;
+    const cx = npc.x;
+    const cy = npc.y;
+    const floatPhase = Math.sin(npc.animTime * 2) * 3;
+
+    ctx.save();
+    ctx.translate(cx, cy + floatPhase);
+
+    ctx.fillStyle = '#FFF8DC';
+    ctx.strokeStyle = COLORS.outline;
+    ctx.lineWidth = 1.5;
+
+    ctx.beginPath();
+    ctx.moveTo(-7, -6);
+    ctx.lineTo(-5, 8);
+    ctx.lineTo(5, 8);
+    ctx.lineTo(7, -6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(10, 0, 4, -Math.PI * 0.5, Math.PI * 0.5);
+    ctx.stroke();
+
+    ctx.fillStyle = '#6F4E37';
+    ctx.beginPath();
+    ctx.ellipse(0, -6, 7, 3, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    const steamOffset = Math.sin(npc.animTime * 4) * 3;
+    ctx.strokeStyle = 'rgba(200,200,200,0.5)';
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 3; i++) {
+      const sx = (i - 1) * 4;
+      const sy = -10 - i * 4 + steamOffset;
+      ctx.beginPath();
+      ctx.moveTo(sx, -8);
+      ctx.quadraticCurveTo(sx + 2, sy + 2, sx - 1, sy);
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = 'rgba(255,215,0,0.4)';
+    ctx.beginPath();
+    for (let i = 0; i < 4; i++) {
+      const sparkleAngle = npc.animTime * 2 + i * Math.PI / 2;
+      const sparkleR = 14;
+      const sparkX = Math.cos(sparkleAngle) * sparkleR;
+      const sparkY = Math.sin(sparkleAngle) * sparkleR - 4;
+      ctx.moveTo(sparkX + 2, sparkY);
+      ctx.arc(sparkX, sparkY, 1.5, 0, Math.PI * 2);
+    }
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  private drawTypewriterBirdsNPC(npc: NPC): void {
+    const ctx = this.ctx;
+    const tx = npc.x;
+    const ty = npc.y;
+
+    ctx.fillStyle = '#4A3728';
+    ctx.strokeStyle = COLORS.outline;
+    ctx.lineWidth = 1.5;
+
+    ctx.fillRect(tx - 18, ty - 18, 36, 16);
+    ctx.strokeRect(tx - 18, ty - 18, 36, 16);
+
+    ctx.fillStyle = '#2A1A08';
+    ctx.fillRect(tx - 15, ty - 4, 30, 4);
+
+    ctx.fillStyle = '#333';
+    for (let r = 0; r < 2; r++) {
+      for (let c = 0; c < 8; c++) {
+        const keyX = tx - 13 + c * 3.5;
+        const keyY = ty - 15 + r * 5;
+        const press = (Math.sin(this.time * 8 + c * 0.5 + r * 3) > 0.7) ? 1 : 0;
+        ctx.fillRect(keyX, keyY + press, 3, 3);
+      }
+    }
+
+    ctx.fillStyle = '#5D3A1A';
+    ctx.fillRect(tx - 5, ty - 2, 10, 10);
+    ctx.strokeRect(tx - 5, ty - 2, 10, 10);
+
+    const paperUp = Math.sin(this.time * 3) * 1;
+    ctx.fillStyle = '#FFF8DC';
+    ctx.fillRect(tx - 4, ty - 24 + paperUp, 8, 22);
+    ctx.strokeStyle = 'rgba(100,100,100,0.3)';
+    ctx.lineWidth = 0.5;
+    ctx.strokeRect(tx - 4, ty - 24 + paperUp, 8, 22);
+
+    for (const bird of npc.birds) {
+      this.drawBird(bird.x, bird.y, bird.rotation, bird.life);
+    }
+  }
+
+  private drawBird(x: number, y: number, rotation: number, life: number): void {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(rotation);
+    ctx.globalAlpha = Math.min(1, life) * 0.7;
+
+    const flapPhase = Math.sin(this.time * 12 + life * 5) * 0.4;
+
+    ctx.fillStyle = '#795548';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 5, 3, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.save();
+    ctx.translate(0, -2);
+    ctx.rotate(flapPhase);
+    ctx.fillStyle = '#5D4037';
+    ctx.beginPath();
+    ctx.ellipse(-2, -3, 6, 2, -0.3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    ctx.save();
+    ctx.translate(0, -2);
+    ctx.rotate(-flapPhase);
+    ctx.fillStyle = '#5D4037';
+    ctx.beginPath();
+    ctx.ellipse(2, -3, 6, 2, 0.3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    ctx.fillStyle = '#FF8F00';
+    ctx.beginPath();
+    ctx.moveTo(-5, 0);
+    ctx.lineTo(-8, -1);
+    ctx.lineTo(-8, 1);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = 'white';
+    ctx.beginPath();
+    ctx.arc(-2, -1, 1, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#1A1A1A';
+    ctx.beginPath();
+    ctx.arc(-2, -1, 0.5, 0, Math.PI * 2);
+    ctx.fill();
+
     ctx.restore();
   }
 }
