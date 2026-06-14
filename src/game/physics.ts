@@ -1,5 +1,6 @@
-import type { Player, Platform, Collectible, ExitDoor } from './types';
+import type { Player, Platform, Collectible, ExitDoor, DreamRuleState, Level } from './types';
 import { GAME_CONFIG } from './config';
+import { isPlatformSolid } from './dreamRules';
 
 export function checkAABB(
   ax: number, ay: number, aw: number, ah: number,
@@ -12,9 +13,13 @@ export function updatePlayerPhysics(
   player: Player,
   platforms: Platform[],
   input: { left: boolean; right: boolean; jump: boolean; jumpPressed: boolean },
-  dt: number
+  dt: number,
+  dreamState: DreamRuleState | null,
+  level: Level
 ): void {
-  const { gravity, moveSpeed, jumpForce, friction } = GAME_CONFIG;
+  const { moveSpeed, jumpForce, friction } = GAME_CONFIG;
+  const gravity = GAME_CONFIG.gravity;
+  const gravityDir = dreamState?.gravityDir ?? 1;
 
   if (input.left) {
     player.vx -= moveSpeed * dt * 8;
@@ -35,19 +40,53 @@ export function updatePlayerPhysics(
   }
 
   if (input.jumpPressed && player.isGrounded) {
-    player.vy = -jumpForce;
+    player.vy = -jumpForce * gravityDir;
     player.isGrounded = false;
   }
 
-  player.vy += gravity * dt;
+  player.vy += gravity * gravityDir * dt;
 
-  if (player.vy > 1200) player.vy = 1200;
+  if (gravityDir > 0 && player.vy > 1200) player.vy = 1200;
+  if (gravityDir > 0 && player.vy < -1200) player.vy = -1200;
+  if (gravityDir < 0 && player.vy < -1200) player.vy = -1200;
+  if (gravityDir < 0 && player.vy > 1200) player.vy = 1200;
 
   player.x += player.vx * dt;
-  resolveHorizontalCollision(player, platforms);
+  resolveHorizontalCollision(player, platforms, dreamState, level);
 
   player.y += player.vy * dt;
-  resolveVerticalCollision(player, platforms);
+  resolveVerticalCollision(player, platforms, dreamState, level, gravityDir);
+
+  if (gravityDir > 0) {
+    if (player.y > level.worldHeight - player.height) {
+      player.y = level.worldHeight - player.height;
+      player.vy = 0;
+      player.isGrounded = true;
+    }
+    if (player.y < 0) {
+      player.y = 0;
+      if (player.vy < 0) player.vy = 0;
+    }
+  } else {
+    if (player.y < 0) {
+      player.y = 0;
+      player.vy = 0;
+      player.isGrounded = true;
+    }
+    if (player.y > level.worldHeight - player.height) {
+      player.y = level.worldHeight - player.height;
+      if (player.vy > 0) player.vy = 0;
+    }
+  }
+
+  if (player.x < 0) {
+    player.x = 0;
+    player.vx = 0;
+  }
+  if (player.x > level.worldWidth - player.width) {
+    player.x = level.worldWidth - player.width;
+    player.vx = 0;
+  }
 
   if (player.isGrounded) {
     if (Math.abs(player.vx) > 10) {
@@ -60,8 +99,14 @@ export function updatePlayerPhysics(
   }
 }
 
-function resolveHorizontalCollision(player: Player, platforms: Platform[]): void {
+function resolveHorizontalCollision(
+  player: Player,
+  platforms: Platform[],
+  dreamState: DreamRuleState | null,
+  level: Level
+): void {
   for (const platform of platforms) {
+    if (dreamState && !isPlatformSolid(dreamState, platform, level)) continue;
     if (checkAABB(player.x, player.y, player.width, player.height,
                   platform.x, platform.y, platform.width, platform.height)) {
       if (player.vx > 0) {
@@ -74,19 +119,37 @@ function resolveHorizontalCollision(player: Player, platforms: Platform[]): void
   }
 }
 
-function resolveVerticalCollision(player: Player, platforms: Platform[]): void {
+function resolveVerticalCollision(
+  player: Player,
+  platforms: Platform[],
+  dreamState: DreamRuleState | null,
+  level: Level,
+  gravityDir: number
+): void {
   player.isGrounded = false;
 
   for (const platform of platforms) {
+    if (dreamState && !isPlatformSolid(dreamState, platform, level)) continue;
     if (checkAABB(player.x, player.y, player.width, player.height,
                   platform.x, platform.y, platform.width, platform.height)) {
-      if (player.vy > 0) {
-        player.y = platform.y - player.height;
-        player.vy = 0;
-        player.isGrounded = true;
-      } else if (player.vy < 0) {
-        player.y = platform.y + platform.height;
-        player.vy = 0;
+      if (gravityDir > 0) {
+        if (player.vy > 0) {
+          player.y = platform.y - player.height;
+          player.vy = 0;
+          player.isGrounded = true;
+        } else if (player.vy < 0) {
+          player.y = platform.y + platform.height;
+          player.vy = 0;
+        }
+      } else {
+        if (player.vy < 0) {
+          player.y = platform.y + platform.height;
+          player.vy = 0;
+          player.isGrounded = true;
+        } else if (player.vy > 0) {
+          player.y = platform.y - player.height;
+          player.vy = 0;
+        }
       }
     }
   }

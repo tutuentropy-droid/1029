@@ -1,17 +1,20 @@
 import { useEffect, useRef, useState } from 'react';
-import type { GameState, InputState, Level, Player } from '@/game/types';
+import type { GameState, InputState, Level, Player, DreamRule, DreamRuleState } from '@/game/types';
 import { createLevel } from '@/game/level';
 import { createPlayer, updatePlayerAnimation } from '@/game/Player';
 import { checkCollectibles, checkExit, updateCollectibles, updatePlayerPhysics } from '@/game/physics';
 import { GameRenderer } from '@/game/renderer';
+import { selectRandomDreamRule, createDreamRuleState, updateDreamRule } from '@/game/dreamRules';
 
 interface UseGameReturn {
   canvasRef: React.RefObject<HTMLCanvasElement>;
   gameState: GameState;
   collectedCount: number;
   totalCount: number;
+  currentRule: DreamRule | null;
   startGame: () => void;
   restartGame: () => void;
+  dismissAnnouncement: () => void;
 }
 
 export function useGame(): UseGameReturn {
@@ -19,6 +22,7 @@ export function useGame(): UseGameReturn {
   const [gameState, setGameState] = useState<GameState>('start');
   const [collectedCount, setCollectedCount] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
+  const [currentRule, setCurrentRule] = useState<DreamRule | null>(null);
 
   const gameStateRef = useRef<GameState>('start');
   const playerRef = useRef<Player | null>(null);
@@ -35,6 +39,7 @@ export function useGame(): UseGameReturn {
   const animationFrameRef = useRef<number>(0);
   const lastTimeRef = useRef<number>(0);
   const gameTimeRef = useRef<number>(0);
+  const dreamStateRef = useRef<DreamRuleState | null>(null);
 
   const initGame = () => {
     const level = createLevel();
@@ -45,18 +50,27 @@ export function useGame(): UseGameReturn {
     setCollectedCount(0);
     setTotalCount(level.collectibles.length);
     gameTimeRef.current = 0;
+
+    const rule = selectRandomDreamRule();
+    setCurrentRule(rule);
+    dreamStateRef.current = createDreamRuleState(rule, level);
   };
 
   const startGame = () => {
     initGame();
+    gameStateRef.current = 'announcement';
+    setGameState('announcement');
+  };
+
+  const dismissAnnouncement = () => {
     gameStateRef.current = 'playing';
     setGameState('playing');
   };
 
   const restartGame = () => {
     initGame();
-    gameStateRef.current = 'playing';
-    setGameState('playing');
+    gameStateRef.current = 'announcement';
+    setGameState('announcement');
   };
 
   useEffect(() => {
@@ -67,7 +81,6 @@ export function useGame(): UseGameReturn {
     if (!ctx) return;
 
     rendererRef.current = new GameRenderer(ctx);
-    initGame();
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.repeat) return;
@@ -129,12 +142,17 @@ export function useGame(): UseGameReturn {
       const player = playerRef.current;
       const level = levelRef.current;
       const renderer = rendererRef.current;
+      const dreamState = dreamStateRef.current;
 
       if (player && level && renderer) {
         if (gameStateRef.current === 'playing') {
           gameTimeRef.current += dt;
 
-          updatePlayerPhysics(player, level.platforms, inputRef.current, dt);
+          if (dreamState) {
+            updateDreamRule(dreamState, level, dt);
+          }
+
+          updatePlayerPhysics(player, level.platforms, inputRef.current, dt, dreamState, level);
           updatePlayerAnimation(player, dt);
           updateCollectibles(level.collectibles, dt, gameTimeRef.current);
 
@@ -153,7 +171,7 @@ export function useGame(): UseGameReturn {
           inputRef.current.jumpPressed = false;
         }
 
-        renderer.render(level, player, collectedRef.current, totalRef.current, gameTimeRef.current);
+        renderer.render(level, player, collectedRef.current, totalRef.current, gameTimeRef.current, dreamState);
       }
 
       animationFrameRef.current = requestAnimationFrame(gameLoop);
@@ -173,7 +191,9 @@ export function useGame(): UseGameReturn {
     gameState,
     collectedCount,
     totalCount,
+    currentRule,
     startGame,
     restartGame,
+    dismissAnnouncement,
   };
 }

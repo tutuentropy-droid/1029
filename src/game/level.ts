@@ -5,13 +5,13 @@ export function createLevel(): Level {
   const floorY = CANVAS_HEIGHT - 60;
 
   const platforms = [
-    { x: 0, y: floorY, width: CANVAS_WIDTH, height: 60, type: 'floor' as const },
-    { x: 100, y: floorY - 100, width: 150, height: 20, type: 'desk' as const },
-    { x: 350, y: floorY - 160, width: 120, height: 20, type: 'desk' as const },
-    { x: 550, y: floorY - 100, width: 140, height: 20, type: 'cabinet' as const },
-    { x: 750, y: floorY - 180, width: 100, height: 20, type: 'cabinet' as const },
-    { x: 200, y: floorY - 260, width: 100, height: 20, type: 'desk' as const },
-    { x: 450, y: floorY - 300, width: 120, height: 20, type: 'cabinet' as const },
+    { x: 0, y: floorY, width: CANVAS_WIDTH, height: 60, type: 'floor' as const, originalX: 0, originalY: floorY, canVanish: false },
+    { x: 100, y: floorY - 100, width: 150, height: 20, type: 'desk' as const, originalX: 100, originalY: floorY - 100, canVanish: true },
+    { x: 350, y: floorY - 160, width: 120, height: 20, type: 'desk' as const, originalX: 350, originalY: floorY - 160, canVanish: false },
+    { x: 550, y: floorY - 100, width: 140, height: 20, type: 'cabinet' as const, originalX: 550, originalY: floorY - 100, canVanish: true },
+    { x: 750, y: floorY - 180, width: 100, height: 20, type: 'cabinet' as const, originalX: 750, originalY: floorY - 180, canVanish: false },
+    { x: 200, y: floorY - 260, width: 100, height: 20, type: 'desk' as const, originalX: 200, originalY: floorY - 260, canVanish: true },
+    { x: 450, y: floorY - 300, width: 120, height: 20, type: 'cabinet' as const, originalX: 450, originalY: floorY - 300, canVanish: false },
   ];
 
   const collectibles = [
@@ -23,11 +23,16 @@ export function createLevel(): Level {
     { x: 490, y: floorY - 340, width: 30, height: 36, collected: false, floatOffset: Math.PI * 0.7, rotation: 0 },
   ];
 
+  const exitX = CANVAS_WIDTH - 100;
+  const exitY = floorY - 120;
+
   const exit = {
-    x: CANVAS_WIDTH - 100,
-    y: floorY - 120,
+    x: exitX,
+    y: exitY,
     width: 70,
     height: 120,
+    originalX: exitX,
+    originalY: exitY,
   };
 
   return {
@@ -37,5 +42,11 @@ export function createLevel(): Level {
     playerStart: { x: 80, y: floorY - 80 },
     worldWidth: CANVAS_WIDTH,
     worldHeight: CANVAS_HEIGHT,
+    exitPositions: [
+      { x: exitX, y: exitY },
+      { x: 50, y: floorY - 120 },
+      { x: 400, y: floorY - 340 },
+      { x: 700, y: floorY - 200 },
+    ],
   };
 }

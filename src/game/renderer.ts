@@ -1,6 +1,7 @@
-import type { Player, Platform, Collectible, ExitDoor, Level } from './types';
+import type { Player, Platform, Collectible, ExitDoor, Level, DreamRuleState } from './types';
 import { COLORS, CANVAS_WIDTH, CANVAS_HEIGHT } from './config';
 import { getWalkPhase, getIdleBob, getWalkBob } from './Player';
+import { isPlatformVisible } from './dreamRules';
 
 export class GameRenderer {
   private ctx: CanvasRenderingContext2D;
@@ -10,20 +11,31 @@ export class GameRenderer {
     this.ctx = ctx;
   }
 
-  render(level: Level, player: Player, collectedCount: number, totalCount: number, time: number): void {
+  render(level: Level, player: Player, collectedCount: number, totalCount: number, time: number, dreamState: DreamRuleState | null): void {
     this.time = time;
     const ctx = this.ctx;
 
     ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
+    if (dreamState && dreamState.rule.type === 'gravity_flip' && dreamState.gravityDir < 0) {
+      ctx.save();
+      ctx.translate(0, CANVAS_HEIGHT);
+      ctx.scale(1, -1);
+    }
+
     this.drawBackground();
     this.drawWallDecorations();
 
-    for (const platform of level.platforms) {
-      this.drawPlatform(platform);
+    for (let i = 0; i < level.platforms.length; i++) {
+      const platform = level.platforms[i];
+      if (dreamState && !isPlatformVisible(dreamState, i, level)) {
+        this.drawVanishingPlatform(platform);
+      } else {
+        this.drawPlatform(platform);
+      }
     }
 
-    this.drawExit(level.exit, collectedCount === totalCount);
+    this.drawExit(level.exit, collectedCount === totalCount, dreamState);
 
     for (const item of level.collectibles) {
       if (!item.collected) {
@@ -32,6 +44,14 @@ export class GameRenderer {
     }
 
     this.drawPlayer(player);
+
+    if (dreamState && dreamState.rule.type === 'gravity_flip' && dreamState.gravityDir < 0) {
+      ctx.restore();
+    }
+
+    if (dreamState) {
+      this.drawDreamRuleOverlay(dreamState);
+    }
   }
 
   private drawBackground(): void {
@@ -226,7 +246,7 @@ export class GameRenderer {
     ctx.restore();
   }
 
-  private drawExit(exit: ExitDoor, isActive: boolean): void {
+  private drawExit(exit: ExitDoor, isActive: boolean, dreamState: DreamRuleState | null): void {
     const ctx = this.ctx;
     const { x, y, width, height } = exit;
 
@@ -621,5 +641,94 @@ export class GameRenderer {
     ctx.font = 'bold 10px sans-serif';
     ctx.fillText('!', -headR * 0.7, headY - headR - 5);
     ctx.fillText('!', headR * 0.5, headY - headR - 8);
+  }
+
+  private drawVanishingPlatform(platform: Platform): void {
+    const ctx = this.ctx;
+    const { x, y, width, height } = platform;
+
+    ctx.save();
+    ctx.globalAlpha = 0.2 + Math.sin(this.time * 4) * 0.1;
+
+    ctx.strokeStyle = 'rgba(255, 100, 100, 0.6)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 4]);
+    ctx.strokeRect(x, y, width, height);
+    ctx.setLineDash([]);
+
+    ctx.fillStyle = 'rgba(255, 100, 100, 0.1)';
+    ctx.fillRect(x, y, width, height);
+
+    ctx.restore();
+  }
+
+  private drawDreamRuleOverlay(state: DreamRuleState): void {
+    const ctx = this.ctx;
+
+    switch (state.rule.type) {
+      case 'gravity_flip':
+        this.drawGravityFlipOverlay(state);
+        break;
+      case 'door_wander':
+        this.drawDoorWanderOverlay(state);
+        break;
+      case 'moving_floor':
+        this.drawMovingFloorOverlay(state);
+        break;
+      case 'vanishing_platforms':
+        break;
+    }
+  }
+
+  private drawGravityFlipOverlay(state: DreamRuleState): void {
+    const ctx = this.ctx;
+
+    if (state.flipWarning) {
+      const flash = Math.sin(this.time * 12) * 0.5 + 0.5;
+      ctx.fillStyle = `rgba(147, 51, 234, ${flash * 0.15})`;
+      ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+      ctx.save();
+      ctx.fillStyle = `rgba(147, 51, 234, ${0.6 + flash * 0.4})`;
+      ctx.font = 'bold 20px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      const arrowY = state.gravityDir > 0 ? 50 : CANVAS_HEIGHT - 50;
+      const arrow = state.gravityDir > 0 ? '⬆ 重力即将反转！ ⬆' : '⬇ 重力即将反转！ ⬇';
+      ctx.fillText(arrow, CANVAS_WIDTH / 2, arrowY);
+      ctx.restore();
+    }
+
+    if (state.gravityDir < 0) {
+      ctx.save();
+      ctx.fillStyle = 'rgba(147, 51, 234, 0.8)';
+      ctx.font = 'bold 14px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('🔄 重力反转中', CANVAS_WIDTH / 2, 25);
+      ctx.restore();
+    }
+  }
+
+  private drawDoorWanderOverlay(state: DreamRuleState): void {
+    const ctx = this.ctx;
+    const timeLeft = 6 - state.doorWanderTimer;
+    if (timeLeft < 2) {
+      const flash = Math.sin(this.time * 8) * 0.5 + 0.5;
+      ctx.save();
+      ctx.fillStyle = `rgba(255, 165, 0, ${flash * 0.15})`;
+      ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      ctx.restore();
+    }
+  }
+
+  private drawMovingFloorOverlay(_state: DreamRuleState): void {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.fillStyle = 'rgba(139, 69, 19, 0.6)';
+    ctx.font = '12px sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText('🌊 地板在移动...', CANVAS_WIDTH - 15, 25);
+    ctx.restore();
   }
 }

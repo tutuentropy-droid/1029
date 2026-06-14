@@ -1,8 +1,29 @@
-export type GameState = 'start' | 'playing' | 'win';
+export type GameState = 'start' | 'announcement' | 'playing' | 'win';
 
 export type PlayerState = 'idle' | 'walk' | 'jump';
 
 export type Facing = 'left' | 'right';
+
+export type DreamRuleType = 'moving_floor' | 'door_wander' | 'gravity_flip' | 'vanishing_platforms';
+
+export interface DreamRule {
+  type: DreamRuleType;
+  hint: string;
+  name: string;
+  description: string;
+}
+
+export interface DreamRuleState {
+  rule: DreamRule;
+  gravityDir: number;
+  floorMoveOffset: number;
+  doorWanderTimer: number;
+  doorWanderIndex: number;
+  vanishTimers: number[];
+  vanishVisible: boolean[];
+  flipTimer: number;
+  flipWarning: boolean;
+}
 
 export interface Player {
   x: number;
@@ -25,6 +46,9 @@ export interface Platform {
   width: number;
   height: number;
   type: 'desk' | 'cabinet' | 'floor' | 'chair';
+  originalX: number;
+  originalY: number;
+  canVanish: boolean;
 }
 
 export interface Collectible {
@@ -42,6 +66,8 @@ export interface ExitDoor {
   y: number;
   width: number;
   height: number;
+  originalX: number;
+  originalY: number;
 }
 
 export interface Level {
@@ -51,6 +77,7 @@ export interface Level {
   playerStart: { x: number; y: number };
   worldWidth: number;
   worldHeight: number;
+  exitPositions: { x: number; y: number }[];
 }
 
 export interface GameConfig {

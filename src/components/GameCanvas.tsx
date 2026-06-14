@@ -3,10 +3,11 @@ import { useGame } from '@/hooks/useGame';
 import StartScreen from '@/components/StartScreen';
 import WinScreen from '@/components/WinScreen';
 import HUD from '@/components/HUD';
+import RuleAnnouncement from '@/components/RuleAnnouncement';
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from '@/game/config';
 
 export default function GameCanvas() {
-  const { canvasRef, gameState, collectedCount, totalCount, startGame, restartGame } = useGame();
+  const { canvasRef, gameState, collectedCount, totalCount, currentRule, startGame, restartGame, dismissAnnouncement } = useGame();
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -30,8 +31,12 @@ export default function GameCanvas() {
 
         {gameState === 'start' && <StartScreen onStart={startGame} />}
 
+        {gameState === 'announcement' && currentRule && (
+          <RuleAnnouncement rule={currentRule} onDismiss={dismissAnnouncement} />
+        )}
+
         {gameState === 'playing' && (
-          <HUD collectedCount={collectedCount} totalCount={totalCount} />
+          <HUD collectedCount={collectedCount} totalCount={totalCount} currentRule={currentRule} />
         )}
 
         {gameState === 'win' && <WinScreen onRestart={restartGame} />}
