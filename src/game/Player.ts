@@ -1,4 +1,4 @@
-import type { Player, Facing } from './types';
+import type { Player, Facing, MoodType } from './types';
 
 export function createPlayer(x: number, y: number): Player {
   return {
@@ -14,7 +14,22 @@ export function createPlayer(x: number, y: number): Player {
     animTime: 0,
     blinkTimer: 2,
     isBlinking: false,
+    mood: 'neutral',
+    moodTransition: 1,
   };
+}
+
+export function setPlayerMood(player: Player, mood: MoodType): void {
+  if (player.mood !== mood) {
+    player.mood = mood;
+    player.moodTransition = 0;
+  }
+}
+
+export function updatePlayerMood(player: Player, dt: number): void {
+  if (player.moodTransition < 1) {
+    player.moodTransition = Math.min(1, player.moodTransition + dt * 3);
+  }
 }
 
 export function updatePlayerAnimation(player: Player, dt: number): void {

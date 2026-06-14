@@ -7,7 +7,7 @@ import RuleAnnouncement from '@/components/RuleAnnouncement';
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from '@/game/config';
 
 export default function GameCanvas() {
-  const { canvasRef, gameState, collectedCount, totalCount, currentRule, startGame, restartGame, dismissAnnouncement } = useGame();
+  const { canvasRef, gameState, collectedCount, totalCount, currentRule, personalityDescription, personalityTraits, startGame, restartGame, dismissAnnouncement } = useGame();
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -36,7 +36,13 @@ export default function GameCanvas() {
         )}
 
         {gameState === 'playing' && (
-          <HUD collectedCount={collectedCount} totalCount={totalCount} currentRule={currentRule} />
+          <HUD
+            collectedCount={collectedCount}
+            totalCount={totalCount}
+            currentRule={currentRule}
+            personalityDescription={personalityDescription}
+            personalityTraits={personalityTraits}
+          />
         )}
 
         {gameState === 'win' && <WinScreen onRestart={restartGame} />}

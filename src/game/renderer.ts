@@ -1,4 +1,4 @@
-import type { Player, Platform, Collectible, ExitDoor, Level, DreamRuleState, NPC, CameraState, CutsceneState } from './types';
+import type { Player, Platform, Collectible, ExitDoor, Level, DreamRuleState, NPC, CameraState, CutsceneState, WorldShiftState, PersonalityState, HiddenArea } from './types';
 import { COLORS, CANVAS_WIDTH, CANVAS_HEIGHT } from './config';
 import { getWalkPhase, getIdleBob, getWalkBob } from './Player';
 import { isPlatformVisible } from './dreamRules';
@@ -11,7 +11,7 @@ export class GameRenderer {
     this.ctx = ctx;
   }
 
-  render(level: Level, player: Player, collectedCount: number, totalCount: number, time: number, dreamState: DreamRuleState | null, npcs: NPC[], camera: CameraState, cutscene: CutsceneState | null): void {
+  render(level: Level, player: Player, collectedCount: number, totalCount: number, time: number, dreamState: DreamRuleState | null, npcs: NPC[], camera: CameraState, cutscene: CutsceneState | null, worldShift: WorldShiftState | null, personality: PersonalityState | null, hiddenAreas: HiddenArea[]): void {
     this.time = time;
     const ctx = this.ctx;
 
@@ -23,8 +23,8 @@ export class GameRenderer {
       ctx.scale(1, -1);
     }
 
-    this.drawBackground();
-    this.drawWallDecorations();
+    this.drawBackground(worldShift);
+    this.drawWallDecorations(worldShift);
 
     ctx.save();
     this.applyCameraTransform(camera);
@@ -38,7 +38,13 @@ export class GameRenderer {
       if (dreamState && !isPlatformVisible(dreamState, i, level)) {
         this.drawVanishingPlatform(platform);
       } else {
-        this.drawPlatform(platform);
+        this.drawPlatform(platform, worldShift);
+      }
+    }
+
+    if (worldShift && worldShift.hiddenPlatformsVisible) {
+      for (const platform of worldShift.extraPlatforms) {
+        this.drawHiddenPlatform(platform, worldShift);
       }
     }
 
@@ -47,6 +53,22 @@ export class GameRenderer {
     for (const item of level.collectibles) {
       if (!item.collected) {
         this.drawCollectible(item, time);
+      }
+    }
+
+    if (worldShift && worldShift.hiddenPlatformsVisible) {
+      for (const item of worldShift.extraCollectibles) {
+        if (!item.collected) {
+          this.drawHiddenCollectible(item, time);
+        }
+      }
+    }
+
+    if (hiddenAreas && hiddenAreas.length > 0) {
+      for (const area of hiddenAreas) {
+        if (area.discovered) {
+          this.drawDiscoveredArea(area);
+        }
       }
     }
 
@@ -74,28 +96,111 @@ export class GameRenderer {
     ctx.translate(-CANVAS_WIDTH / 2 + camera.offsetX, -CANVAS_HEIGHT / 2 + camera.offsetY);
   }
 
-  private drawBackground(): void {
+  private drawBackground(worldShift: WorldShiftState | null): void {
     const ctx = this.ctx;
+    const intensity = worldShift ? worldShift.dreamIntensity : 0.3;
+    const colorShift = worldShift ? worldShift.colorShift : 0;
+
+    const topColor = this.shiftColor(COLORS.bgTop, colorShift * 20, intensity * 0.3);
+    const bottomColor = this.shiftColor(COLORS.bgBottom, colorShift * 15, intensity * 0.2);
+
     const gradient = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
-    gradient.addColorStop(0, COLORS.bgTop);
-    gradient.addColorStop(1, COLORS.bgBottom);
+    gradient.addColorStop(0, topColor);
+    gradient.addColorStop(1, bottomColor);
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-    ctx.strokeStyle = 'rgba(210, 180, 140, 0.3)';
+    const waveAmplitude = 2 + intensity * 5;
+    const waveSpeed = 0.1 + intensity * 0.1;
+    ctx.strokeStyle = `rgba(210, 180, 140, ${0.2 + intensity * 0.2})`;
     ctx.lineWidth = 1;
     for (let y = 0; y < CANVAS_HEIGHT; y += 30) {
       ctx.beginPath();
-      ctx.moveTo(0, y + Math.sin(y * 0.1) * 2);
-      ctx.lineTo(CANVAS_WIDTH, y + Math.sin(y * 0.1 + 1) * 2);
+      ctx.moveTo(0, y + Math.sin(y * waveSpeed + this.time * 0.5) * waveAmplitude);
+      ctx.lineTo(CANVAS_WIDTH, y + Math.sin(y * waveSpeed + 1 + this.time * 0.5) * waveAmplitude);
       ctx.stroke();
+    }
+
+    if (intensity > 0.5) {
+      this.drawDreamParticles(intensity);
     }
   }
 
-  private drawWallDecorations(): void {
-    const ctx = this.ctx;
+  private shiftColor(hex: string, shift: number, saturationBoost: number): string {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
 
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+    const hueShift = shift;
+    const [h, s, l] = this.rgbToHsl(r, g, b);
+    const newH = (h + hueShift / 360) % 1;
+    const newS = Math.min(1, s + saturationBoost);
+    const [nr, ng, nb] = this.hslToRgb(newH, newS, l);
+
+    return `rgb(${Math.round(nr)}, ${Math.round(ng)}, ${Math.round(nb)})`;
+  }
+
+  private rgbToHsl(r: number, g: number, b: number): [number, number, number] {
+    r /= 255; g /= 255; b /= 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    let h = 0, s = 0;
+    const l = (max + min) / 2;
+
+    if (max !== min) {
+      const d = max - min;
+      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+      switch (max) {
+        case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break;
+        case g: h = ((b - r) / d + 2) / 6; break;
+        case b: h = ((r - g) / d + 4) / 6; break;
+      }
+    }
+    return [h, s, l];
+  }
+
+  private hslToRgb(h: number, s: number, l: number): [number, number, number] {
+    let r, g, b;
+    if (s === 0) {
+      r = g = b = l;
+    } else {
+      const hue2rgb = (p: number, q: number, t: number) => {
+        if (t < 0) t += 1;
+        if (t > 1) t -= 1;
+        if (t < 1/6) return p + (q - p) * 6 * t;
+        if (t < 1/2) return q;
+        if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+        return p;
+      };
+      const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+      const p = 2 * l - q;
+      r = hue2rgb(p, q, h + 1/3);
+      g = hue2rgb(p, q, h);
+      b = hue2rgb(p, q, h - 1/3);
+    }
+    return [r * 255, g * 255, b * 255];
+  }
+
+  private drawDreamParticles(intensity: number): void {
+    const ctx = this.ctx;
+    const count = Math.floor(intensity * 15);
+    for (let i = 0; i < count; i++) {
+      const x = (i * 73 + this.time * 20) % CANVAS_WIDTH;
+      const y = (i * 47 + Math.sin(this.time + i) * 30) % CANVAS_HEIGHT;
+      const size = 2 + (i % 3) * 1.5;
+      const alpha = 0.2 + (Math.sin(this.time * 2 + i) * 0.5 + 0.5) * 0.3;
+
+      ctx.fillStyle = `rgba(200, 180, 255, ${alpha})`;
+      ctx.beginPath();
+      ctx.arc(x, y, size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  private drawWallDecorations(worldShift: WorldShiftState | null): void {
+    const ctx = this.ctx;
+    const intensity = worldShift ? worldShift.dreamIntensity : 0.3;
+
+    ctx.fillStyle = `rgba(255, 255, 255, ${0.5 + intensity * 0.2})`;
     ctx.strokeStyle = COLORS.outline;
     ctx.lineWidth = 2;
 
@@ -105,17 +210,22 @@ export class GameRenderer {
       { x: 720, y: 55, w: 70, h: 55 },
     ];
 
-    for (const frame of frames) {
-      ctx.fillRect(frame.x, frame.y, frame.w, frame.h);
-      ctx.strokeRect(frame.x, frame.y, frame.w, frame.h);
+    for (let i = 0; i < frames.length; i++) {
+      const frame = frames[i];
+      const wobble = Math.sin(this.time * 0.8 + i) * intensity * 3;
+      const fx = frame.x + wobble;
+      const fy = frame.y + wobble * 0.5;
+
+      ctx.fillRect(fx, fy, frame.w, frame.h);
+      ctx.strokeRect(fx, fy, frame.w, frame.h);
 
       ctx.strokeStyle = 'rgba(100, 149, 237, 0.4)';
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.moveTo(frame.x + frame.w / 2, frame.y);
-      ctx.lineTo(frame.x + frame.w / 2, frame.y + frame.h);
-      ctx.moveTo(frame.x, frame.y + frame.h / 2);
-      ctx.lineTo(frame.x + frame.w, frame.y + frame.h / 2);
+      ctx.moveTo(fx + frame.w / 2, fy);
+      ctx.lineTo(fx + frame.w / 2, fy + frame.h);
+      ctx.moveTo(fx, fy + frame.h / 2);
+      ctx.lineTo(fx + frame.w, fy + frame.h / 2);
       ctx.stroke();
 
       ctx.strokeStyle = COLORS.outline;
@@ -124,8 +234,9 @@ export class GameRenderer {
 
     ctx.fillStyle = 'rgba(135, 206, 235, 0.3)';
     const cloudY = 90 + Math.sin(this.time * 0.5) * 3;
-    this.drawCloud(300, cloudY, 40);
-    this.drawCloud(600, cloudY + 20, 30);
+    const cloudDrift = intensity * 20;
+    this.drawCloud(300 + Math.sin(this.time * 0.2) * cloudDrift, cloudY, 40);
+    this.drawCloud(600 + Math.cos(this.time * 0.15) * cloudDrift, cloudY + 20, 30);
   }
 
   private drawCloud(x: number, y: number, size: number): void {
@@ -138,9 +249,15 @@ export class GameRenderer {
     ctx.fill();
   }
 
-  private drawPlatform(platform: Platform): void {
+  private drawPlatform(platform: Platform, worldShift: WorldShiftState | null): void {
     const ctx = this.ctx;
     const { x, y, width, height, type } = platform;
+    const looseness = worldShift ? worldShift.platformLooseness : 0;
+
+    ctx.save();
+    if (looseness > 0) {
+      ctx.globalAlpha = 1 - looseness * 0.15;
+    }
 
     if (type === 'floor') {
       ctx.fillStyle = COLORS.floor;
@@ -213,7 +330,93 @@ export class GameRenderer {
       ctx.strokeStyle = COLORS.outline;
       ctx.lineWidth = 2;
       ctx.strokeRect(x, y, width, height);
+    } else if (type === 'chair') {
+      ctx.fillStyle = COLORS.chair;
+      ctx.fillRect(x, y, width, height);
+      ctx.strokeStyle = COLORS.outline;
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(x, y, width, height);
     }
+
+    ctx.restore();
+  }
+
+  private drawHiddenPlatform(platform: Platform, worldShift: WorldShiftState): void {
+    const ctx = this.ctx;
+    const { x, y, width, height, type } = platform;
+
+    ctx.save();
+    const pulse = Math.sin(this.time * 3) * 0.2 + 0.6;
+    ctx.globalAlpha = pulse;
+
+    ctx.shadowColor = 'rgba(147, 112, 219, 0.8)';
+    ctx.shadowBlur = 15;
+
+    if (type === 'chair' || type === 'desk' || type === 'cabinet') {
+      ctx.fillStyle = '#9370DB';
+      ctx.fillRect(x, y, width, height);
+      ctx.strokeStyle = '#4B0082';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(x, y, width, height);
+    }
+
+    ctx.shadowBlur = 0;
+    ctx.restore();
+  }
+
+  private drawHiddenCollectible(item: Collectible, time: number): void {
+    const ctx = this.ctx;
+    const floatY = Math.sin(time * 3 + item.floatOffset) * 5;
+    const y = item.y + floatY;
+
+    ctx.save();
+    ctx.translate(item.x, y);
+    ctx.rotate(item.rotation);
+
+    const pulse = Math.sin(time * 4) * 0.3 + 0.7;
+    ctx.globalAlpha = pulse;
+
+    ctx.shadowColor = 'rgba(186, 85, 211, 0.9)';
+    ctx.shadowBlur = 20;
+
+    ctx.fillStyle = '#DDA0DD';
+    ctx.strokeStyle = '#8B008B';
+    ctx.lineWidth = 2;
+
+    ctx.beginPath();
+    ctx.moveTo(-item.width / 2, -item.height / 2);
+    ctx.lineTo(item.width / 2 - 5, -item.height / 2);
+    ctx.lineTo(item.width / 2, -item.height / 2 + 5);
+    ctx.lineTo(item.width / 2, item.height / 2);
+    ctx.lineTo(-item.width / 2, item.height / 2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.shadowBlur = 0;
+    ctx.restore();
+  }
+
+  private drawDiscoveredArea(area: HiddenArea): void {
+    const ctx = this.ctx;
+
+    ctx.save();
+    const pulse = Math.sin(this.time * 2) * 0.1 + 0.2;
+    ctx.fillStyle = `rgba(147, 112, 219, ${pulse})`;
+    ctx.fillRect(area.x, area.y, area.width, area.height);
+
+    ctx.strokeStyle = 'rgba(186, 85, 211, 0.5)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 5]);
+    ctx.strokeRect(area.x, area.y, area.width, area.height);
+    ctx.setLineDash([]);
+
+    ctx.fillStyle = 'rgba(147, 112, 219, 0.9)';
+    ctx.font = 'bold 10px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('✨ 发现区域 ✨', area.x + area.width / 2, area.y - 5);
+
+    ctx.restore();
   }
 
   private drawCollectible(item: Collectible, time: number): void {
@@ -342,7 +545,7 @@ export class GameRenderer {
     ctx.rotate(leanAngle);
 
     if (state === 'jump') {
-      this.drawJumpingPlayer(width, height);
+      this.drawJumpingPlayer(player, width, height);
     } else {
       this.drawStandingPlayer(player, width, height);
     }
@@ -474,9 +677,46 @@ export class GameRenderer {
     ctx.closePath();
     ctx.fill();
 
+    this.drawFace(player, headY, headR);
+
+    if (player.mood === 'tired' && player.state === 'idle') {
+      const zBob = Math.sin(this.time * 3) * 2;
+      ctx.fillStyle = 'rgba(100, 149, 237, 0.7)';
+      ctx.font = 'bold 12px sans-serif';
+      ctx.fillText('Z', headR * 0.6, headY - headR - 5 + zBob);
+      ctx.font = 'bold 9px sans-serif';
+      ctx.fillText('z', headR * 0.9, headY - headR + 3 + zBob * 0.5);
+    }
+
+    if (player.mood === 'happy') {
+      const sparkleY = headY - headR - 8 + Math.sin(this.time * 5) * 2;
+      ctx.fillStyle = 'rgba(255, 215, 0, 0.8)';
+      ctx.font = 'bold 10px sans-serif';
+      ctx.fillText('✨', -headR * 0.7, sparkleY);
+      ctx.fillText('✨', headR * 0.3, sparkleY - 3);
+    }
+
+    if (player.mood === 'surprised') {
+      const exclaimBob = Math.sin(this.time * 8) * 3;
+      ctx.fillStyle = 'rgba(255, 100, 100, 0.9)';
+      ctx.font = 'bold 14px sans-serif';
+      ctx.fillText('!', -headR * 0.3, headY - headR - 8 + exclaimBob);
+      ctx.fillText('!', headR * 0.1, headY - headR - 10 + exclaimBob * 0.8);
+    }
+
+    if (player.mood === 'curious') {
+      const questionBob = Math.sin(this.time * 4) * 2;
+      ctx.fillStyle = 'rgba(100, 149, 237, 0.8)';
+      ctx.font = 'bold 12px sans-serif';
+      ctx.fillText('?', headR * 0.5, headY - headR - 5 + questionBob);
+    }
+  }
+
+  private drawFace(player: Player, headY: number, headR: number): void {
+    const ctx = this.ctx;
+    const mood = player.mood;
     const eyeY = headY - 2;
     const eyeSpacing = headR * 0.45;
-    const eyeSize = player.isBlinking ? 1 : 5;
 
     ctx.fillStyle = COLORS.outline;
 
@@ -484,64 +724,191 @@ export class GameRenderer {
       ctx.fillRect(-eyeSpacing - 3, eyeY, 7, 2);
       ctx.fillRect(eyeSpacing - 4, eyeY, 7, 2);
     } else {
-      const sleepyOffset = 1.5;
-
-      ctx.beginPath();
-      ctx.ellipse(-eyeSpacing, eyeY + sleepyOffset, 4, 5 - sleepyOffset, 0, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.beginPath();
-      ctx.ellipse(eyeSpacing, eyeY + sleepyOffset, 4, 5 - sleepyOffset, 0, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.fillStyle = 'white';
-      ctx.beginPath();
-      ctx.arc(-eyeSpacing + 1.5, eyeY + sleepyOffset - 1, 1.5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.arc(eyeSpacing + 1.5, eyeY + sleepyOffset - 1, 1.5, 0, Math.PI * 2);
-      ctx.fill();
+      this.drawEyes(mood, eyeY, eyeSpacing);
     }
 
+    this.drawEyebrows(mood, eyeY, eyeSpacing);
+    this.drawBlush(mood, headY, headR);
+    this.drawMouth(mood, headY);
+  }
+
+  private drawEyes(mood: string, eyeY: number, eyeSpacing: number): void {
+    const ctx = this.ctx;
+
+    let eyeWidth = 4;
+    let eyeHeight = 5;
+    let eyeOffsetY = 0;
+
+    switch (mood) {
+      case 'happy':
+        eyeWidth = 5;
+        eyeHeight = 3;
+        eyeOffsetY = 1;
+        break;
+      case 'surprised':
+        eyeWidth = 5;
+        eyeHeight = 6;
+        eyeOffsetY = -1;
+        break;
+      case 'tired':
+        eyeWidth = 4;
+        eyeHeight = 3;
+        eyeOffsetY = 1.5;
+        break;
+      case 'focused':
+        eyeWidth = 3.5;
+        eyeHeight = 4.5;
+        break;
+      case 'curious':
+        eyeWidth = 4.5;
+        eyeHeight = 5;
+        break;
+      default:
+        eyeOffsetY = 1.5;
+    }
+
+    ctx.fillStyle = COLORS.outline;
+    ctx.beginPath();
+    ctx.ellipse(-eyeSpacing, eyeY + eyeOffsetY, eyeWidth, eyeHeight, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(eyeSpacing, eyeY + eyeOffsetY, eyeWidth, eyeHeight, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    if (mood !== 'tired') {
+      ctx.fillStyle = 'white';
+      const highlightOffsetX = mood === 'surprised' ? 0 : 1.5;
+      const highlightOffsetY = mood === 'surprised' ? -1.5 : -1;
+      ctx.beginPath();
+      ctx.arc(-eyeSpacing + highlightOffsetX, eyeY + eyeOffsetY + highlightOffsetY, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(eyeSpacing + highlightOffsetX, eyeY + eyeOffsetY + highlightOffsetY, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  private drawEyebrows(mood: string, eyeY: number, eyeSpacing: number): void {
+    const ctx = this.ctx;
     ctx.strokeStyle = COLORS.outline;
     ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(-eyeSpacing - 4, eyeY - 6);
-    ctx.quadraticCurveTo(-eyeSpacing, eyeY - 7, -eyeSpacing + 4, eyeY - 6);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(eyeSpacing - 4, eyeY - 6);
-    ctx.quadraticCurveTo(eyeSpacing, eyeY - 7, eyeSpacing + 4, eyeY - 6);
-    ctx.stroke();
 
-    ctx.fillStyle = 'rgba(255, 182, 193, 0.5)';
+    let leftBrowAngle = 0;
+    let rightBrowAngle = 0;
+    let browY = eyeY - 6;
+
+    switch (mood) {
+      case 'happy':
+        leftBrowAngle = 0.1;
+        rightBrowAngle = -0.1;
+        browY = eyeY - 7;
+        break;
+      case 'surprised':
+        leftBrowAngle = -0.3;
+        rightBrowAngle = 0.3;
+        browY = eyeY - 9;
+        break;
+      case 'tired':
+        leftBrowAngle = 0.2;
+        rightBrowAngle = -0.2;
+        browY = eyeY - 4;
+        break;
+      case 'focused':
+        leftBrowAngle = 0.15;
+        rightBrowAngle = -0.15;
+        browY = eyeY - 7;
+        break;
+      case 'curious':
+        leftBrowAngle = -0.2;
+        rightBrowAngle = 0;
+        browY = eyeY - 8;
+        break;
+      default:
+        break;
+    }
+
+    ctx.save();
+    ctx.translate(-eyeSpacing, browY);
+    ctx.rotate(leftBrowAngle);
+    ctx.beginPath();
+    ctx.moveTo(-4, 0);
+    ctx.quadraticCurveTo(0, -1, 4, 0);
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.save();
+    ctx.translate(eyeSpacing, browY);
+    ctx.rotate(rightBrowAngle);
+    ctx.beginPath();
+    ctx.moveTo(-4, 0);
+    ctx.quadraticCurveTo(0, -1, 4, 0);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  private drawBlush(mood: string, headY: number, headR: number): void {
+    const ctx = this.ctx;
+    let alpha = 0.5;
+
+    switch (mood) {
+      case 'happy':
+        alpha = 0.7;
+        break;
+      case 'surprised':
+        alpha = 0.8;
+        break;
+      case 'tired':
+        alpha = 0.3;
+        break;
+      default:
+        alpha = 0.5;
+    }
+
+    ctx.fillStyle = `rgba(255, 182, 193, ${alpha})`;
     ctx.beginPath();
     ctx.ellipse(-headR * 0.55, headY + 5, 4, 3, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.beginPath();
     ctx.ellipse(headR * 0.55, headY + 5, 4, 3, 0, 0, Math.PI * 2);
     ctx.fill();
-
-    ctx.strokeStyle = COLORS.outline;
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    if (player.state === 'idle') {
-      ctx.arc(0, headY + 10, 3, 0, Math.PI);
-    } else {
-      ctx.arc(0, headY + 9, 4, 0.1, Math.PI - 0.1);
-    }
-    ctx.stroke();
-
-    if (player.state === 'idle' && player.animTime % 4 > 3) {
-      ctx.fillStyle = 'rgba(100, 149, 237, 0.6)';
-      ctx.font = 'bold 12px sans-serif';
-      ctx.fillText('Z', headR * 0.6, headY - headR - 5);
-      ctx.font = 'bold 9px sans-serif';
-      ctx.fillText('z', headR * 0.9, headY - headR + 3);
-    }
   }
 
-  private drawJumpingPlayer(width: number, height: number): void {
+  private drawMouth(mood: string, headY: number): void {
+    const ctx = this.ctx;
+    ctx.strokeStyle = COLORS.outline;
+    ctx.lineWidth = 1.5;
+
+    ctx.beginPath();
+
+    switch (mood) {
+      case 'happy':
+        ctx.arc(0, headY + 8, 5, 0.1, Math.PI - 0.1);
+        break;
+      case 'surprised':
+        ctx.ellipse(0, headY + 11, 3, 4, 0, 0, Math.PI * 2);
+        ctx.fillStyle = COLORS.outline;
+        ctx.fill();
+        return;
+      case 'tired':
+        ctx.moveTo(-4, headY + 11);
+        ctx.quadraticCurveTo(0, headY + 9, 4, headY + 11);
+        break;
+      case 'focused':
+        ctx.moveTo(-3, headY + 10);
+        ctx.lineTo(3, headY + 10);
+        break;
+      case 'curious':
+        ctx.moveTo(-3, headY + 10);
+        ctx.quadraticCurveTo(0, headY + 12, 3, headY + 9);
+        break;
+      default:
+        ctx.arc(0, headY + 10, 3, 0, Math.PI);
+    }
+
+    ctx.stroke();
+  }
+
+  private drawJumpingPlayer(player: Player, width: number, height: number): void {
     const ctx = this.ctx;
 
     const bodyH = height * 0.45;
@@ -624,43 +991,15 @@ export class GameRenderer {
     ctx.arc(0, headY - headR * 0.2, headR, Math.PI, 0);
     ctx.fill();
 
-    ctx.fillStyle = COLORS.outline;
-    const eyeY = headY - 2;
-    const eyeSpacing = headR * 0.45;
+    this.drawFace(player, headY, headR);
 
-    ctx.beginPath();
-    ctx.arc(-eyeSpacing, eyeY, 4, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(eyeSpacing, eyeY, 4, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = 'white';
-    ctx.beginPath();
-    ctx.arc(-eyeSpacing + 1, eyeY - 1, 1.5, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(eyeSpacing + 1, eyeY - 1, 1.5, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.strokeStyle = COLORS.outline;
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.arc(0, headY + 10, 5, 0.1, Math.PI - 0.1);
-    ctx.stroke();
-
-    ctx.fillStyle = 'rgba(255, 182, 193, 0.6)';
-    ctx.beginPath();
-    ctx.ellipse(-headR * 0.55, headY + 4, 4, 3, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.ellipse(headR * 0.55, headY + 4, 4, 3, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = '#87CEEB';
-    ctx.font = 'bold 10px sans-serif';
-    ctx.fillText('!', -headR * 0.7, headY - headR - 5);
-    ctx.fillText('!', headR * 0.5, headY - headR - 8);
+    if (player.mood === 'surprised' || player.mood === 'curious') {
+      const exclaimBob = Math.sin(this.time * 8) * 3;
+      ctx.fillStyle = 'rgba(135, 206, 235, 0.9)';
+      ctx.font = 'bold 10px sans-serif';
+      ctx.fillText('!', -headR * 0.7, headY - headR - 5 + exclaimBob);
+      ctx.fillText('!', headR * 0.5, headY - headR - 8 + exclaimBob * 0.8);
+    }
   }
 
   private drawVanishingPlatform(platform: Platform): void {

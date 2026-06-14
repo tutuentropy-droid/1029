@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import type { GameState, InputState, Level, Player, DreamRule, DreamRuleState, NPC, CameraState, CutsceneState } from '@/game/types';
+import type { GameState, InputState, Level, Player, DreamRule, DreamRuleState, NPC, CameraState, CutsceneState, PersonalityState, WorldShiftState, HiddenArea } from '@/game/types';
 import { createLevel } from '@/game/level';
-import { createPlayer, updatePlayerAnimation } from '@/game/Player';
+import { createPlayer, updatePlayerAnimation, setPlayerMood, updatePlayerMood } from '@/game/Player';
 import { checkCollectibles, checkExit, updateCollectibles, updatePlayerPhysics } from '@/game/physics';
 import { GameRenderer } from '@/game/renderer';
 import { selectRandomDreamRule, createDreamRuleState, updateDreamRule } from '@/game/dreamRules';
 import { createNPCs, updateNPC, createCamera, updateCamera, createCutsceneState, updateCutscene } from '@/game/npc';
+import { createPersonalityState, createWorldShiftState, createHiddenAreas, updatePersonality, updateWorldShift, applyPlatformLooseness, recordJump, getPersonalityDescription, getPersonalityTraitsList } from '@/game/personality';
 
 interface UseGameReturn {
   canvasRef: React.RefObject<HTMLCanvasElement>;
@@ -13,6 +14,9 @@ interface UseGameReturn {
   collectedCount: number;
   totalCount: number;
   currentRule: DreamRule | null;
+  personality: PersonalityState | null;
+  personalityDescription: string;
+  personalityTraits: { name: string; value: number; icon: string }[];
   startGame: () => void;
   restartGame: () => void;
   dismissAnnouncement: () => void;
@@ -24,6 +28,9 @@ export function useGame(): UseGameReturn {
   const [collectedCount, setCollectedCount] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
   const [currentRule, setCurrentRule] = useState<DreamRule | null>(null);
+  const [personalityState, setPersonalityState] = useState<PersonalityState | null>(null);
+  const [personalityDescription, setPersonalityDescription] = useState('');
+  const [personalityTraits, setPersonalityTraits] = useState<{ name: string; value: number; icon: string }[]>([]);
 
   const gameStateRef = useRef<GameState>('start');
   const playerRef = useRef<Player | null>(null);
@@ -44,11 +51,15 @@ export function useGame(): UseGameReturn {
   const npcsRef = useRef<NPC[]>([]);
   const cameraRef = useRef<CameraState>(createCamera());
   const cutsceneRef = useRef<CutsceneState | null>(null);
+  const personalityRef = useRef<PersonalityState | null>(null);
+  const worldShiftRef = useRef<WorldShiftState | null>(null);
+  const hiddenAreasRef = useRef<HiddenArea[]>([]);
 
   const initGame = () => {
     const level = createLevel();
     levelRef.current = level;
-    playerRef.current = createPlayer(level.playerStart.x, level.playerStart.y);
+    const player = createPlayer(level.playerStart.x, level.playerStart.y);
+    playerRef.current = player;
     collectedRef.current = 0;
     totalRef.current = level.collectibles.length;
     setCollectedCount(0);
@@ -62,6 +73,16 @@ export function useGame(): UseGameReturn {
     npcsRef.current = createNPCs();
     cameraRef.current = createCamera();
     cutsceneRef.current = createCutsceneState();
+
+    const personality = createPersonalityState();
+    personality.lastPosition = { x: player.x, y: player.y };
+    personalityRef.current = personality;
+    worldShiftRef.current = createWorldShiftState();
+    hiddenAreasRef.current = createHiddenAreas();
+
+    setPersonalityState(personality);
+    setPersonalityDescription(getPersonalityDescription(personality));
+    setPersonalityTraits(getPersonalityTraitsList(personality));
   };
 
   const startGame = () => {
@@ -154,18 +175,35 @@ export function useGame(): UseGameReturn {
       const npcs = npcsRef.current;
       const camera = cameraRef.current;
       const cutscene = cutsceneRef.current;
+      const personality = personalityRef.current;
+      const worldShift = worldShiftRef.current;
+      const hiddenAreas = hiddenAreasRef.current;
 
-      if (player && level && renderer) {
+      if (player && level && renderer && personality && worldShift) {
         if (gameStateRef.current === 'playing') {
           gameTimeRef.current += dt;
+
+          if (inputRef.current.jumpPressed && player.isGrounded) {
+            recordJump(personality);
+          }
 
           if (dreamState) {
             updateDreamRule(dreamState, level, dt);
           }
 
-          updatePlayerPhysics(player, level.platforms, inputRef.current, dt, dreamState, level);
+          let allPlatforms = [...level.platforms];
+          if (worldShift.hiddenPlatformsVisible) {
+            allPlatforms = [...allPlatforms, ...worldShift.extraPlatforms];
+          }
+
+          updatePlayerPhysics(player, allPlatforms, inputRef.current, dt, dreamState, level);
           updatePlayerAnimation(player, dt);
+          updatePlayerMood(player, dt);
           updateCollectibles(level.collectibles, dt, gameTimeRef.current);
+
+          if (worldShift.hiddenPlatformsVisible) {
+            updateCollectibles(worldShift.extraCollectibles, dt, gameTimeRef.current);
+          }
 
           for (const npc of npcs) {
             updateNPC(npc, dt);
@@ -178,12 +216,31 @@ export function useGame(): UseGameReturn {
           }
 
           const collected = checkCollectibles(player, level.collectibles);
-          if (collected > 0) {
-            collectedRef.current += collected;
+          let extraCollected = 0;
+          if (worldShift.hiddenPlatformsVisible) {
+            extraCollected = checkCollectibles(player, worldShift.extraCollectibles);
+          }
+          const totalCollected = collected + extraCollected;
+          if (totalCollected > 0) {
+            collectedRef.current += totalCollected;
+            totalRef.current = level.collectibles.length + (worldShift.hiddenPlatformsVisible ? worldShift.extraCollectibles.length : 0);
             setCollectedCount(collectedRef.current);
+            setTotalCount(totalRef.current);
           }
 
-          const allCollected = collectedRef.current === totalRef.current;
+          updatePersonality(personality, player, level, collectedRef.current, dt);
+          updateWorldShift(worldShift, personality, level, hiddenAreas, dt);
+          applyPlatformLooseness(level.platforms, worldShift.platformLooseness, gameTimeRef.current);
+
+          setPlayerMood(player, personality.currentMood);
+
+          if (Math.random() < 0.02) {
+            setPersonalityState({ ...personality });
+            setPersonalityDescription(getPersonalityDescription(personality));
+            setPersonalityTraits(getPersonalityTraitsList(personality));
+          }
+
+          const allCollected = collectedRef.current >= totalRef.current;
           if (checkExit(player, level.exit, allCollected)) {
             gameStateRef.current = 'win';
             setGameState('win');
@@ -192,7 +249,7 @@ export function useGame(): UseGameReturn {
           inputRef.current.jumpPressed = false;
         }
 
-        renderer.render(level, player, collectedRef.current, totalRef.current, gameTimeRef.current, dreamState, npcs, camera, cutscene);
+        renderer.render(level, player, collectedRef.current, totalRef.current, gameTimeRef.current, dreamState, npcs, camera, cutscene, worldShift, personality, hiddenAreas);
       }
 
       animationFrameRef.current = requestAnimationFrame(gameLoop);
@@ -213,6 +270,9 @@ export function useGame(): UseGameReturn {
     collectedCount,
     totalCount,
     currentRule,
+    personality: personalityState,
+    personalityDescription,
+    personalityTraits,
     startGame,
     restartGame,
     dismissAnnouncement,

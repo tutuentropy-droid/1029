@@ -4,6 +4,48 @@ export type PlayerState = 'idle' | 'walk' | 'jump';
 
 export type Facing = 'left' | 'right';
 
+export type MoodType = 'neutral' | 'happy' | 'surprised' | 'tired' | 'focused' | 'curious';
+
+export interface PersonalityTraits {
+  skipTendency: number;
+  exploration: number;
+  adventurousness: number;
+  caution: number;
+}
+
+export interface PersonalityState {
+  traits: PersonalityTraits;
+  currentMood: MoodType;
+  moodTimer: number;
+  totalJumps: number;
+  totalDistance: number;
+  collectiblesFound: number;
+  shortcutsUsed: number;
+  hiddenAreasDiscovered: number;
+  timePlayed: number;
+  lastPosition: { x: number; y: number };
+}
+
+export interface WorldShiftState {
+  platformLooseness: number;
+  hiddenPlatformsVisible: boolean;
+  dreamIntensity: number;
+  colorShift: number;
+  extraCollectibles: Collectible[];
+  extraPlatforms: Platform[];
+}
+
+export interface HiddenArea {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  discovered: boolean;
+  platformIds: number[];
+  collectibleIds: number[];
+}
+
 export type DreamRuleType = 'moving_floor' | 'door_wander' | 'gravity_flip' | 'vanishing_platforms';
 
 export interface DreamRule {
@@ -38,6 +80,8 @@ export interface Player {
   animTime: number;
   blinkTimer: number;
   isBlinking: boolean;
+  mood: MoodType;
+  moodTransition: number;
 }
 
 export interface Platform {
