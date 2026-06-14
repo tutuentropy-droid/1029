@@ -14,6 +14,26 @@ interface HUDProps {
 export default function HUD({ collectedCount, totalCount, currentRule, personalityDescription, personalityTraits, currentFloor, totalFloors, floorTheme }: HUDProps) {
   const allCollected = collectedCount === totalCount;
 
+  const getHintText = () => {
+    if (!floorTheme) return { hint: '跳上平台收集文件', subHint: '你的选择塑造梦境' };
+    switch (floorTheme.rule) {
+      case 'no_jump':
+        return { hint: '走上阶梯收集文件', subHint: '保持安静，不要跳跃' };
+      case 'flip_controls':
+        return { hint: '注意：左右方向相反', subHint: '镜子里的世界是反的' };
+      case 'slippery':
+        return { hint: '地面打滑，小心控制', subHint: '纸上走路，停不下来' };
+      case 'time_reverse':
+        return { hint: '快走！时间在倒退', subHint: '走三步，时间推两步' };
+      case 'slow_motion':
+        return { hint: '时间变慢了，慢慢走', subHint: '一切都慢了下来' };
+      default:
+        return { hint: '跳上平台收集文件', subHint: '你的选择塑造梦境' };
+    }
+  };
+
+  const hintText = getHintText();
+
   return (
     <div className="absolute top-4 left-4 right-4 flex justify-between items-start z-10 pointer-events-none">
       <div className="flex flex-col gap-2">
@@ -102,10 +122,10 @@ export default function HUD({ collectedCount, totalCount, currentRule, personali
 
         <div className="bg-white/80 backdrop-blur-sm px-3 py-2 rounded-xl border-2 border-amber-300 shadow-md">
           <p className="text-xs text-amber-700">
-            💡 提示：跳上平台收集文件
+            💡 {hintText.hint}
           </p>
           <p className="text-xs text-amber-500 mt-1">
-            🌟 你的选择塑造梦境
+            🌟 {hintText.subHint}
           </p>
         </div>
       </div>

@@ -136,26 +136,27 @@ function createLobbyLevel(): Level {
 
 function createMeetingLevel(): Level {
   const floorY = CANVAS_HEIGHT - 60;
+  const stepHeight = 25;
   const platforms = [
     makePlatform(0, floorY, CANVAS_WIDTH, 60, 'floor'),
-    makePlatform(80, floorY - 50, 800, 20, 'desk'),
-    makePlatform(100, floorY - 150, 200, 20, 'desk'),
-    makePlatform(400, floorY - 150, 200, 20, 'desk'),
-    makePlatform(700, floorY - 150, 160, 20, 'desk'),
-    makePlatform(200, floorY - 250, 180, 20, 'cabinet'),
-    makePlatform(500, floorY - 250, 180, 20, 'cabinet'),
-    makePlatform(350, floorY - 340, 250, 20, 'desk', true),
+    makePlatform(0, floorY - stepHeight, 300, 20, 'desk'),
+    makePlatform(200, floorY - stepHeight * 2, 300, 20, 'desk'),
+    makePlatform(400, floorY - stepHeight * 3, 300, 20, 'desk'),
+    makePlatform(600, floorY - stepHeight * 4, 300, 20, 'desk'),
+    makePlatform(100, floorY - stepHeight * 5, 250, 20, 'cabinet'),
+    makePlatform(450, floorY - stepHeight * 6, 250, 20, 'cabinet'),
+    makePlatform(700, floorY - stepHeight * 6, 180, 20, 'cabinet'),
   ];
   const collectibles = [
-    makeCollectible(180, floorY - 190, 0),
-    makeCollectible(480, floorY - 190, Math.PI / 4),
-    makeCollectible(760, floorY - 190, Math.PI / 2),
-    makeCollectible(270, floorY - 290, Math.PI),
-    makeCollectible(570, floorY - 290, Math.PI * 1.5),
-    makeCollectible(460, floorY - 380, Math.PI * 0.5),
+    makeCollectible(150, floorY - stepHeight - 40, 0),
+    makeCollectible(350, floorY - stepHeight * 2 - 40, Math.PI / 4),
+    makeCollectible(550, floorY - stepHeight * 3 - 40, Math.PI / 2),
+    makeCollectible(750, floorY - stepHeight * 4 - 40, Math.PI),
+    makeCollectible(200, floorY - stepHeight * 5 - 40, Math.PI * 1.5),
+    makeCollectible(550, floorY - stepHeight * 6 - 40, Math.PI * 0.5),
   ];
   const exitX = CANVAS_WIDTH - 100;
-  const exitY = floorY - 90;
+  const exitY = floorY - stepHeight * 6 - 120;
   return {
     platforms,
     collectibles,
@@ -165,8 +166,7 @@ function createMeetingLevel(): Level {
     worldHeight: CANVAS_HEIGHT,
     exitPositions: [
       { x: exitX, y: exitY },
-      { x: 50, y: floorY - 180 },
-      { x: 450, y: floorY - 370 },
+      { x: 50, y: floorY - stepHeight * 6 - 120 },
     ],
     floorIndex: 1,
     floorTheme: FLOOR_THEMES[1],

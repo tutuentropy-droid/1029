@@ -142,6 +142,8 @@ export function updatePlayerPhysics(
   }
 }
 
+const MAX_STEP_HEIGHT = 28;
+
 function resolveHorizontalCollision(
   player: Player,
   platforms: Platform[],
@@ -152,14 +154,53 @@ function resolveHorizontalCollision(
     if (dreamState && !isPlatformSolid(dreamState, platform, level)) continue;
     if (checkAABB(player.x, player.y, player.width, player.height,
                   platform.x, platform.y, platform.width, platform.height)) {
-      if (player.vx > 0) {
-        player.x = platform.x - player.width;
-      } else if (player.vx < 0) {
-        player.x = platform.x + platform.width;
+      let steppedUp = false;
+      if (player.isGrounded) {
+        const playerBottom = player.y + player.height;
+        const stepHeight = playerBottom - platform.y;
+        if (stepHeight > 0 && stepHeight <= MAX_STEP_HEIGHT) {
+          const newY = platform.y - player.height;
+          let tempX = player.x;
+          if (player.vx > 0) {
+            tempX = platform.x - player.width;
+          } else if (player.vx < 0) {
+            tempX = platform.x + platform.width;
+          }
+          if (!checkAnyAABB(tempX, newY, player.width, player.height, platforms, dreamState, level, platform)) {
+            player.x = tempX;
+            player.y = newY;
+            steppedUp = true;
+          }
+        }
       }
-      player.vx = 0;
+
+      if (!steppedUp) {
+        if (player.vx > 0) {
+          player.x = platform.x - player.width;
+        } else if (player.vx < 0) {
+          player.x = platform.x + platform.width;
+        }
+        player.vx = 0;
+      }
     }
   }
+}
+
+function checkAnyAABB(
+  x: number, y: number, w: number, h: number,
+  platforms: Platform[],
+  dreamState: DreamRuleState | null,
+  level: Level,
+  excludePlatform: Platform
+): boolean {
+  for (const p of platforms) {
+    if (p === excludePlatform) continue;
+    if (dreamState && !isPlatformSolid(dreamState, p, level)) continue;
+    if (checkAABB(x, y, w, h, p.x, p.y, p.width, p.height)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function resolveVerticalCollision(
