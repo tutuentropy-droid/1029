@@ -249,7 +249,7 @@ export function useGame(): UseGameReturn {
           inputRef.current.jumpPressed = false;
         }
 
-        renderer.render(level, player, collectedRef.current, totalRef.current, gameTimeRef.current, dreamState, npcs, camera, cutscene, worldShift, personality, hiddenAreas);
+        renderer.render(level, player, collectedRef.current, totalRef.current, gameTimeRef.current, dreamState, npcs, camera, cutscene, worldShift, personality, hiddenAreas, []);
       }
 
       animationFrameRef.current = requestAnimationFrame(gameLoop);

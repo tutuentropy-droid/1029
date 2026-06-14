@@ -198,3 +198,70 @@ export interface InputState {
   jump: boolean;
   jumpPressed: boolean;
 }
+
+export type CustomRuleType =
+  | 'npc_float'
+  | 'rain_slow'
+  | 'file_run'
+  | 'gravity_low'
+  | 'gravity_high'
+  | 'speed_up'
+  | 'slow_down'
+  | 'bouncy_platforms'
+  | 'invisible_platforms'
+  | 'flip_controls';
+
+export interface CustomRule {
+  id: string;
+  type: CustomRuleType;
+  name: string;
+  description: string;
+  icon: string;
+  enabled: boolean;
+  intensity: number;
+}
+
+export type EditorElementType =
+  | 'platform'
+  | 'collectible'
+  | 'npc'
+  | 'exit'
+  | 'player_start';
+
+export interface EditorElement {
+  id: string;
+  type: EditorElementType;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  subType?: string;
+  data?: Record<string, unknown>;
+}
+
+export interface DirectorLevel {
+  id: string;
+  name: string;
+  author: string;
+  createdAt: number;
+  elements: EditorElement[];
+  rules: CustomRule[];
+  worldWidth: number;
+  worldHeight: number;
+  description?: string;
+}
+
+export interface AutoTestResult {
+  success: boolean;
+  message: string;
+  steps: string[];
+  path: { x: number; y: number }[];
+  time: number;
+  collected: number;
+  total: number;
+  reachedExit: boolean;
+}
+
+export type EditorMode = 'select' | 'move' | 'delete';
+
+export type DirectorGameState = 'editing' | 'playing' | 'testing' | 'sharing';

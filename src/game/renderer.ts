@@ -1,7 +1,8 @@
-import type { Player, Platform, Collectible, ExitDoor, Level, DreamRuleState, NPC, CameraState, CutsceneState, WorldShiftState, PersonalityState, HiddenArea } from './types';
+import type { Player, Platform, Collectible, ExitDoor, Level, DreamRuleState, NPC, CameraState, CutsceneState, WorldShiftState, PersonalityState, HiddenArea, CustomRule } from './types';
 import { COLORS, CANVAS_WIDTH, CANVAS_HEIGHT } from './config';
 import { getWalkPhase, getIdleBob, getWalkBob } from './Player';
 import { isPlatformVisible } from './dreamRules';
+import { isPlatformsInvisible, isRaining } from './customRules';
 
 export class GameRenderer {
   private ctx: CanvasRenderingContext2D;
@@ -11,7 +12,7 @@ export class GameRenderer {
     this.ctx = ctx;
   }
 
-  render(level: Level, player: Player, collectedCount: number, totalCount: number, time: number, dreamState: DreamRuleState | null, npcs: NPC[], camera: CameraState, cutscene: CutsceneState | null, worldShift: WorldShiftState | null, personality: PersonalityState | null, hiddenAreas: HiddenArea[]): void {
+  render(level: Level, player: Player, collectedCount: number, totalCount: number, time: number, dreamState: DreamRuleState | null, npcs: NPC[], camera: CameraState, cutscene: CutsceneState | null, worldShift: WorldShiftState | null, personality: PersonalityState | null, hiddenAreas: HiddenArea[], customRules: CustomRule[] = []): void {
     this.time = time;
     const ctx = this.ctx;
 
@@ -33,10 +34,13 @@ export class GameRenderer {
       this.drawNPC(npc);
     }
 
-    for (let i = 0; i < level.platforms.length; i++) {
+    const platformsInvisible = isPlatformsInvisible(customRules);
+  for (let i = 0; i < level.platforms.length; i++) {
       const platform = level.platforms[i];
       if (dreamState && !isPlatformVisible(dreamState, i, level)) {
         this.drawVanishingPlatform(platform);
+      } else if (platformsInvisible && platform.type !== 'floor') {
+        this.drawInvisiblePlatform(platform);
       } else {
         this.drawPlatform(platform, worldShift);
       }
@@ -84,9 +88,56 @@ export class GameRenderer {
       this.drawDreamRuleOverlay(dreamState);
     }
 
+    if (isRaining(customRules)) {
+      this.drawRain();
+    }
+
     if (cutscene) {
       this.drawCutsceneMessage(cutscene);
     }
+  }
+
+  private drawInvisiblePlatform(platform: Platform): void {
+    const ctx = this.ctx;
+    const { x, y, width, height } = platform;
+
+    ctx.save();
+    const pulse = Math.sin(this.time * 2) * 0.05 + 0.05;
+    ctx.globalAlpha = pulse;
+
+    ctx.strokeStyle = 'rgba(200, 200, 255, 0.3)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 3]);
+    ctx.strokeRect(x, y, width, height);
+    ctx.setLineDash([]);
+
+    ctx.restore();
+  }
+
+  private drawRain(): void {
+    const ctx = this.ctx;
+    ctx.save();
+
+    ctx.strokeStyle = 'rgba(150, 180, 255, 0.4)';
+    ctx.lineWidth = 1;
+
+    for (let i = 0; i < 100; i++) {
+      const x = (i * 97 + this.time * 400) % CANVAS_WIDTH;
+      const y = (i * 53 + this.time * 600) % CANVAS_HEIGHT;
+      const length = 8 + (i % 5) * 3;
+
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x - 3, y + length);
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = 'rgba(150, 180, 255, 0.6)';
+    ctx.font = 'bold 14px sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText('🌧️ 下雨中...', CANVAS_WIDTH - 15, 45);
+
+    ctx.restore();
   }
 
   private applyCameraTransform(camera: CameraState): void {
