@@ -1,8 +1,9 @@
 interface StartScreenProps {
   onStart: () => void;
+  onSkipNextFloor?: () => void;
 }
 
-export default function StartScreen({ onStart }: StartScreenProps) {
+export default function StartScreen({ onStart, onSkipNextFloor }: StartScreenProps) {
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-b from-amber-50/95 to-orange-100/95 backdrop-blur-sm z-10">
       <div className="text-center">
@@ -44,6 +45,17 @@ export default function StartScreen({ onStart }: StartScreenProps) {
         <div className="mt-6 text-amber-600 text-sm italic">
           "再睡五分钟...就五分钟..."
         </div>
+
+        {onSkipNextFloor && (
+          <button
+            type="button"
+            onClick={onSkipNextFloor}
+            title="Ctrl+Shift+N"
+            className="mt-4 px-3 py-1 text-[10px] text-amber-400/40 hover:text-amber-600/80 transition-colors"
+          >
+            ⚙ 测试下一关（直达 2F）
+          </button>
+        )}
       </div>
     </div>
   );

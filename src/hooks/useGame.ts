@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { GameState, InputState, Level, Player, DreamRule, DreamRuleState, NPC, CameraState, CutsceneState, PersonalityState, WorldShiftState, HiddenArea, FloorTransition, FloorTheme } from '@/game/types';
 import { createLevel } from '@/game/level';
 import { createPlayer, updatePlayerAnimation, setPlayerMood, updatePlayerMood } from '@/game/Player';
@@ -7,7 +7,8 @@ import { GameRenderer } from '@/game/renderer';
 import { selectRandomDreamRule, createDreamRuleState, updateDreamRule } from '@/game/dreamRules';
 import { createNPCs, updateNPC, createCamera, updateCamera, createCutsceneState, updateCutscene } from '@/game/npc';
 import { createPersonalityState, createWorldShiftState, createHiddenAreas, updatePersonality, updateWorldShift, applyPlatformLooseness, recordJump, getPersonalityDescription, getPersonalityTraitsList } from '@/game/personality';
-import { createFloorLevel, createFloorTransition, updateFloorTransition, TOTAL_FLOORS, FLOOR_THEMES } from '@/game/officeBuilding';
+import { createFloorLevel, createFloorTransition, updateFloorTransition, TOTAL_FLOORS } from '@/game/officeBuilding';
+import { isSkipNextFloorShortcut } from '@/game/backdoor';
 
 interface UseGameReturn {
   canvasRef: React.RefObject<HTMLCanvasElement>;
@@ -24,6 +25,7 @@ interface UseGameReturn {
   startGame: () => void;
   restartGame: () => void;
   dismissAnnouncement: () => void;
+  skipNextFloor: () => void;
 }
 
 export function useGame(): UseGameReturn {
@@ -118,6 +120,39 @@ export function useGame(): UseGameReturn {
     setGameState('announcement');
   };
 
+  const skipNextFloor = useCallback(() => {
+    floorTransitionRef.current = null;
+
+    if (gameStateRef.current === 'start') {
+      initFloor(1);
+      gameStateRef.current = 'playing';
+      setGameState('playing');
+      return;
+    }
+
+    if (gameStateRef.current === 'announcement') {
+      initFloor(1);
+      gameStateRef.current = 'playing';
+      setGameState('playing');
+      return;
+    }
+
+    if (gameStateRef.current === 'win') {
+      return;
+    }
+
+    const current = currentFloorRef.current;
+    if (current >= TOTAL_FLOORS - 1) {
+      gameStateRef.current = 'win';
+      setGameState('win');
+      return;
+    }
+
+    initFloor(current + 1);
+    gameStateRef.current = 'playing';
+    setGameState('playing');
+  }, []);
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -129,6 +164,12 @@ export function useGame(): UseGameReturn {
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.repeat) return;
+
+      if (isSkipNextFloorShortcut(e)) {
+        e.preventDefault();
+        skipNextFloor();
+        return;
+      }
 
       switch (e.key.toLowerCase()) {
         case 'arrowleft':
@@ -317,5 +358,6 @@ export function useGame(): UseGameReturn {
     startGame,
     restartGame,
     dismissAnnouncement,
+    skipNextFloor,
   };
 }

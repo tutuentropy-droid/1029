@@ -5,9 +5,16 @@ import WinScreen from '@/components/WinScreen';
 import HUD from '@/components/HUD';
 import RuleAnnouncement from '@/components/RuleAnnouncement';
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from '@/game/config';
+import { BACKDOOR_ENABLED, isSkipNextFloorUrl } from '@/game/backdoor';
 
 export default function GameCanvas() {
-  const { canvasRef, gameState, collectedCount, totalCount, currentRule, personalityDescription, personalityTraits, currentFloor, totalFloors, floorTheme, startGame, restartGame, dismissAnnouncement } = useGame();
+  const { canvasRef, gameState, collectedCount, totalCount, currentRule, personalityDescription, personalityTraits, currentFloor, totalFloors, floorTheme, startGame, restartGame, dismissAnnouncement, skipNextFloor } = useGame();
+
+  useEffect(() => {
+    if (isSkipNextFloorUrl()) {
+      skipNextFloor();
+    }
+  }, [skipNextFloor]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -29,23 +36,41 @@ export default function GameCanvas() {
           className="w-full h-full block"
         />
 
-        {gameState === 'start' && <StartScreen onStart={startGame} />}
+        {gameState === 'start' && (
+          <StartScreen
+            onStart={startGame}
+            onSkipNextFloor={BACKDOOR_ENABLED ? skipNextFloor : undefined}
+          />
+        )}
 
         {gameState === 'announcement' && currentRule && (
           <RuleAnnouncement rule={currentRule} onDismiss={dismissAnnouncement} />
         )}
 
         {gameState === 'playing' && (
-          <HUD
-            collectedCount={collectedCount}
-            totalCount={totalCount}
-            currentRule={currentRule}
-            personalityDescription={personalityDescription}
-            personalityTraits={personalityTraits}
-            currentFloor={currentFloor}
-            totalFloors={totalFloors}
-            floorTheme={floorTheme}
-          />
+          <>
+            <HUD
+              collectedCount={collectedCount}
+              totalCount={totalCount}
+              currentRule={currentRule}
+              personalityDescription={personalityDescription}
+              personalityTraits={personalityTraits}
+              currentFloor={currentFloor}
+              totalFloors={totalFloors}
+              floorTheme={floorTheme}
+            />
+            {BACKDOOR_ENABLED && (
+              <button
+                type="button"
+                onClick={skipNextFloor}
+                title="Ctrl+Shift+N"
+                className="absolute bottom-3 right-3 z-10 px-2 py-1 text-[10px] rounded-lg
+                           bg-black/20 text-white/50 hover:bg-black/40 hover:text-white/90 transition-colors"
+              >
+                ⏭ 下一关
+              </button>
+            )}
+          </>
         )}
 
         {gameState === 'win' && <WinScreen onRestart={restartGame} />}
