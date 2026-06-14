@@ -4,6 +4,7 @@ import { createPlayer } from './Player';
 import { updatePlayerPhysics, checkCollectibles, checkExit } from './physics';
 import { applyRuleEffects, updateRuleDynamics, isBouncyPlatformsEnabled } from './customRules';
 import { createNPC } from './npc';
+import { FLOOR_THEMES } from './officeBuilding';
 
 export function createEmptyLevel(name: string = '我的梦境'): DirectorLevel {
   const floorY = CANVAS_HEIGHT - 60;
@@ -155,6 +156,8 @@ export function directorLevelToGameLevel(directorLevel: DirectorLevel): {
       worldWidth: directorLevel.worldWidth,
       worldHeight: directorLevel.worldHeight,
       exitPositions: [{ x: exit.x, y: exit.y }],
+      floorIndex: 0,
+      floorTheme: FLOOR_THEMES[0],
     },
     npcs,
     playerStart,

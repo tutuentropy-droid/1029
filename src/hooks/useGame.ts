@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { GameState, InputState, Level, Player, DreamRule, DreamRuleState, NPC, CameraState, CutsceneState, PersonalityState, WorldShiftState, HiddenArea } from '@/game/types';
+import type { GameState, InputState, Level, Player, DreamRule, DreamRuleState, NPC, CameraState, CutsceneState, PersonalityState, WorldShiftState, HiddenArea, FloorTransition, FloorTheme } from '@/game/types';
 import { createLevel } from '@/game/level';
 import { createPlayer, updatePlayerAnimation, setPlayerMood, updatePlayerMood } from '@/game/Player';
 import { checkCollectibles, checkExit, updateCollectibles, updatePlayerPhysics } from '@/game/physics';
@@ -7,6 +7,7 @@ import { GameRenderer } from '@/game/renderer';
 import { selectRandomDreamRule, createDreamRuleState, updateDreamRule } from '@/game/dreamRules';
 import { createNPCs, updateNPC, createCamera, updateCamera, createCutsceneState, updateCutscene } from '@/game/npc';
 import { createPersonalityState, createWorldShiftState, createHiddenAreas, updatePersonality, updateWorldShift, applyPlatformLooseness, recordJump, getPersonalityDescription, getPersonalityTraitsList } from '@/game/personality';
+import { createFloorLevel, createFloorTransition, updateFloorTransition, TOTAL_FLOORS, FLOOR_THEMES } from '@/game/officeBuilding';
 
 interface UseGameReturn {
   canvasRef: React.RefObject<HTMLCanvasElement>;
@@ -17,6 +18,9 @@ interface UseGameReturn {
   personality: PersonalityState | null;
   personalityDescription: string;
   personalityTraits: { name: string; value: number; icon: string }[];
+  currentFloor: number;
+  totalFloors: number;
+  floorTheme: FloorTheme | null;
   startGame: () => void;
   restartGame: () => void;
   dismissAnnouncement: () => void;
@@ -31,6 +35,8 @@ export function useGame(): UseGameReturn {
   const [personalityState, setPersonalityState] = useState<PersonalityState | null>(null);
   const [personalityDescription, setPersonalityDescription] = useState('');
   const [personalityTraits, setPersonalityTraits] = useState<{ name: string; value: number; icon: string }[]>([]);
+  const [currentFloor, setCurrentFloor] = useState(0);
+  const [floorTheme, setFloorTheme] = useState<FloorTheme | null>(null);
 
   const gameStateRef = useRef<GameState>('start');
   const playerRef = useRef<Player | null>(null);
@@ -54,9 +60,11 @@ export function useGame(): UseGameReturn {
   const personalityRef = useRef<PersonalityState | null>(null);
   const worldShiftRef = useRef<WorldShiftState | null>(null);
   const hiddenAreasRef = useRef<HiddenArea[]>([]);
+  const floorTransitionRef = useRef<FloorTransition | null>(null);
+  const currentFloorRef = useRef(0);
 
-  const initGame = () => {
-    const level = createLevel();
+  const initFloor = (floorIndex: number) => {
+    const level = createFloorLevel(floorIndex);
     levelRef.current = level;
     const player = createPlayer(level.playerStart.x, level.playerStart.y);
     playerRef.current = player;
@@ -74,15 +82,23 @@ export function useGame(): UseGameReturn {
     cameraRef.current = createCamera();
     cutsceneRef.current = createCutsceneState();
 
-    const personality = createPersonalityState();
+    const personality = personalityRef.current ?? createPersonalityState();
     personality.lastPosition = { x: player.x, y: player.y };
     personalityRef.current = personality;
     worldShiftRef.current = createWorldShiftState();
     hiddenAreasRef.current = createHiddenAreas();
 
+    currentFloorRef.current = floorIndex;
+    setCurrentFloor(floorIndex);
+    setFloorTheme(level.floorTheme);
+
     setPersonalityState(personality);
     setPersonalityDescription(getPersonalityDescription(personality));
     setPersonalityTraits(getPersonalityTraitsList(personality));
+  };
+
+  const initGame = () => {
+    initFloor(0);
   };
 
   const startGame = () => {
@@ -178,9 +194,25 @@ export function useGame(): UseGameReturn {
       const personality = personalityRef.current;
       const worldShift = worldShiftRef.current;
       const hiddenAreas = hiddenAreasRef.current;
+      const floorTransition = floorTransitionRef.current;
 
       if (player && level && renderer && personality && worldShift) {
-        if (gameStateRef.current === 'playing') {
+        const inTransition = floorTransition && floorTransition.active;
+
+        if (inTransition) {
+          updateFloorTransition(floorTransition, dt);
+
+          if (floorTransition.phase === 'moving' && floorTransition.timer < dt * 2) {
+            const nextFloor = floorTransition.toFloor;
+            initFloor(nextFloor);
+          }
+
+          if (floorTransition.phase === 'done') {
+            floorTransitionRef.current = null;
+          }
+        }
+
+        if (gameStateRef.current === 'playing' && !inTransition) {
           gameTimeRef.current += dt;
 
           if (inputRef.current.jumpPressed && player.isGrounded) {
@@ -242,14 +274,20 @@ export function useGame(): UseGameReturn {
 
           const allCollected = collectedRef.current >= totalRef.current;
           if (checkExit(player, level.exit, allCollected)) {
-            gameStateRef.current = 'win';
-            setGameState('win');
+            const currentFloorIdx = currentFloorRef.current;
+            if (currentFloorIdx < TOTAL_FLOORS - 1) {
+              const transition = createFloorTransition(currentFloorIdx, currentFloorIdx + 1);
+              floorTransitionRef.current = transition;
+            } else {
+              gameStateRef.current = 'win';
+              setGameState('win');
+            }
           }
 
           inputRef.current.jumpPressed = false;
         }
 
-        renderer.render(level, player, collectedRef.current, totalRef.current, gameTimeRef.current, dreamState, npcs, camera, cutscene, worldShift, personality, hiddenAreas, []);
+        renderer.render(level, player, collectedRef.current, totalRef.current, gameTimeRef.current, dreamState, npcs, camera, cutscene, worldShift, personality, hiddenAreas, [], floorTransitionRef.current);
       }
 
       animationFrameRef.current = requestAnimationFrame(gameLoop);
@@ -273,6 +311,9 @@ export function useGame(): UseGameReturn {
     personality: personalityState,
     personalityDescription,
     personalityTraits,
+    currentFloor,
+    totalFloors: TOTAL_FLOORS,
+    floorTheme,
     startGame,
     restartGame,
     dismissAnnouncement,

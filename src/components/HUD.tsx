@@ -1,4 +1,4 @@
-import type { DreamRule } from '@/game/types';
+import type { DreamRule, FloorTheme } from '@/game/types';
 
 interface HUDProps {
   collectedCount: number;
@@ -6,9 +6,12 @@ interface HUDProps {
   currentRule: DreamRule | null;
   personalityDescription: string;
   personalityTraits: { name: string; value: number; icon: string }[];
+  currentFloor: number;
+  totalFloors: number;
+  floorTheme: FloorTheme | null;
 }
 
-export default function HUD({ collectedCount, totalCount, currentRule, personalityDescription, personalityTraits }: HUDProps) {
+export default function HUD({ collectedCount, totalCount, currentRule, personalityDescription, personalityTraits, currentFloor, totalFloors, floorTheme }: HUDProps) {
   const allCollected = collectedCount === totalCount;
 
   return (
@@ -26,6 +29,32 @@ export default function HUD({ collectedCount, totalCount, currentRule, personali
             {allCollected ? '✨ 收集完成！冲向出口！' : '收集所有文件...'}
           </p>
         </div>
+
+        {floorTheme && (
+          <div className="bg-white/80 backdrop-blur-sm px-3 py-2 rounded-xl border-2 shadow-md"
+               style={{ borderColor: floorTheme.accentColor }}>
+            <div className="flex items-center gap-1.5 mb-1">
+              <span className="text-sm">🏢</span>
+              <span className="text-xs font-bold" style={{ color: floorTheme.accentColor }}>
+                {currentFloor + 1}F / {totalFloors}F — {floorTheme.name}
+              </span>
+            </div>
+            <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all duration-500"
+                style={{
+                  width: `${((currentFloor + 1) / totalFloors) * 100}%`,
+                  backgroundColor: floorTheme.accentColor,
+                }}
+              />
+            </div>
+            {floorTheme.rule !== 'none' && (
+              <p className="text-xs mt-1 font-bold" style={{ color: floorTheme.accentColor }}>
+                ⚠️ {floorTheme.ruleDescription}
+              </p>
+            )}
+          </div>
+        )}
 
         {personalityTraits.length > 0 && (
           <div className="bg-indigo-50/90 backdrop-blur-sm px-3 py-2 rounded-xl border-2 border-indigo-300 shadow-md">

@@ -33,13 +33,13 @@ export default function WinScreen({ onRestart }: WinScreenProps) {
         <div className="bg-gradient-to-b from-amber-50 to-orange-100 p-10 rounded-3xl border-4 border-amber-600
                         shadow-2xl text-center transform animate-bounce"
              style={{ animationDuration: '0.5s', animationIterationCount: 1 }}>
-          <div className="text-6xl mb-4">🎉</div>
+          <div className="text-6xl mb-4">�</div>
           <h2 className="text-4xl font-bold text-amber-800 mb-3"
               style={{ fontFamily: '"Comic Sans MS", cursive, sans-serif' }}>
-            下班啦！！
+            逃离办公楼！
           </h2>
-          <p className="text-amber-700 text-lg mb-2">你成功带着所有文件逃离了办公室~</p>
-          <p className="text-amber-600 text-sm mb-6 italic">老板：人呢？？？</p>
+          <p className="text-amber-700 text-lg mb-2">你穿越了所有楼层，终于逃出了梦境办公楼~</p>
+          <p className="text-amber-600 text-sm mb-6 italic">老板：整栋楼的人呢？？？</p>
 
           <div className="text-5xl mb-6 space-x-2">
             <span className="inline-block animate-bounce" style={{ animationDelay: '0s' }}>🥳</span>

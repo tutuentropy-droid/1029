@@ -1,6 +1,44 @@
-import type { Player, Platform, Collectible, ExitDoor, DreamRuleState, Level } from './types';
+import type { Player, Platform, Collectible, ExitDoor, DreamRuleState, Level, FloorRule } from './types';
 import { GAME_CONFIG } from './config';
 import { isPlatformSolid } from './dreamRules';
+
+export function applyFloorRuleToInput(rule: FloorRule, input: { left: boolean; right: boolean; jump: boolean; jumpPressed: boolean }): { left: boolean; right: boolean; jump: boolean; jumpPressed: boolean } {
+  switch (rule) {
+    case 'no_jump':
+      return { ...input, jump: false, jumpPressed: false };
+    case 'flip_controls':
+      return { left: input.right, right: input.left, jump: input.jump, jumpPressed: input.jumpPressed };
+    default:
+      return input;
+  }
+}
+
+export function applyFloorRuleToFriction(rule: FloorRule, baseFriction: number): number {
+  switch (rule) {
+    case 'slippery':
+      return 0.97;
+    default:
+      return baseFriction;
+  }
+}
+
+export function applyFloorRuleToSpeed(rule: FloorRule, baseSpeed: number): number {
+  switch (rule) {
+    case 'slow_motion':
+      return baseSpeed * 0.6;
+    default:
+      return baseSpeed;
+  }
+}
+
+export function getTimeReversePush(rule: FloorRule, player: Player, dt: number): { dx: number; dy: number } {
+  if (rule !== 'time_reverse') return { dx: 0, dy: 0 };
+  const pushStrength = 40;
+  return {
+    dx: -player.vx * dt * 0.3,
+    dy: 0,
+  };
+}
 
 export function checkAABB(
   ax: number, ay: number, aw: number, ah: number,
@@ -17,29 +55,33 @@ export function updatePlayerPhysics(
   dreamState: DreamRuleState | null,
   level: Level
 ): void {
-  const { moveSpeed, jumpForce, friction } = GAME_CONFIG;
+  const floorRule = level.floorTheme.rule;
+  const effectiveInput = applyFloorRuleToInput(floorRule, input);
+  const effectiveSpeed = applyFloorRuleToSpeed(floorRule, GAME_CONFIG.moveSpeed);
+  const effectiveFriction = applyFloorRuleToFriction(floorRule, GAME_CONFIG.friction);
+  const { jumpForce } = GAME_CONFIG;
   const gravity = GAME_CONFIG.gravity;
   const gravityDir = dreamState?.gravityDir ?? 1;
 
-  if (input.left) {
-    player.vx -= moveSpeed * dt * 8;
+  if (effectiveInput.left) {
+    player.vx -= effectiveSpeed * dt * 8;
     player.facing = 'left';
   }
-  if (input.right) {
-    player.vx += moveSpeed * dt * 8;
+  if (effectiveInput.right) {
+    player.vx += effectiveSpeed * dt * 8;
     player.facing = 'right';
   }
 
-  const maxSpeed = moveSpeed;
+  const maxSpeed = effectiveSpeed;
   if (player.vx > maxSpeed) player.vx = maxSpeed;
   if (player.vx < -maxSpeed) player.vx = -maxSpeed;
 
   if (player.isGrounded) {
-    player.vx *= friction;
+    player.vx *= effectiveFriction;
     if (Math.abs(player.vx) < 10) player.vx = 0;
   }
 
-  if (input.jumpPressed && player.isGrounded) {
+  if (effectiveInput.jumpPressed && player.isGrounded) {
     player.vy = -jumpForce * gravityDir;
     player.isGrounded = false;
   }
@@ -51,10 +93,11 @@ export function updatePlayerPhysics(
   if (gravityDir < 0 && player.vy < -1200) player.vy = -1200;
   if (gravityDir < 0 && player.vy > 1200) player.vy = 1200;
 
-  player.x += player.vx * dt;
+  const reversePush = getTimeReversePush(floorRule, player, dt);
+  player.x += player.vx * dt + reversePush.dx;
   resolveHorizontalCollision(player, platforms, dreamState, level);
 
-  player.y += player.vy * dt;
+  player.y += player.vy * dt + reversePush.dy;
   resolveVerticalCollision(player, platforms, dreamState, level, gravityDir);
 
   if (gravityDir > 0) {

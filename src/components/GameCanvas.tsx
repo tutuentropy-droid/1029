@@ -7,7 +7,7 @@ import RuleAnnouncement from '@/components/RuleAnnouncement';
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from '@/game/config';
 
 export default function GameCanvas() {
-  const { canvasRef, gameState, collectedCount, totalCount, currentRule, personalityDescription, personalityTraits, startGame, restartGame, dismissAnnouncement } = useGame();
+  const { canvasRef, gameState, collectedCount, totalCount, currentRule, personalityDescription, personalityTraits, currentFloor, totalFloors, floorTheme, startGame, restartGame, dismissAnnouncement } = useGame();
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -42,6 +42,9 @@ export default function GameCanvas() {
             currentRule={currentRule}
             personalityDescription={personalityDescription}
             personalityTraits={personalityTraits}
+            currentFloor={currentFloor}
+            totalFloors={totalFloors}
+            floorTheme={floorTheme}
           />
         )}
 

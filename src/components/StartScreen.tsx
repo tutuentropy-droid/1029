@@ -9,9 +9,9 @@ export default function StartScreen({ onStart }: StartScreenProps) {
         <div className="mb-6">
           <h1 className="text-5xl font-bold text-amber-900 mb-2 drop-shadow-md"
               style={{ fontFamily: '"Comic Sans MS", cursive, sans-serif' }}>
-            😴 梦境打工人 💼
+            😴 梦境办公楼 💼
           </h1>
-          <p className="text-amber-700 text-lg">在被老板发现前，带着文件逃离办公室！</p>
+          <p className="text-amber-700 text-lg">在被老板发现前，穿越诡异楼层，带着文件逃离办公楼！</p>
         </div>
 
         <div className="mb-8 flex justify-center">
@@ -36,7 +36,8 @@ export default function StartScreen({ onStart }: StartScreenProps) {
           <div className="text-amber-700 text-sm space-y-2 text-left">
             <p>⬅️ ➡️ <span className="font-semibold">或</span> A D — 左右移动</p>
             <p>⬆️ <span className="font-semibold">或</span> W <span className="font-semibold">或</span> 空格 — 跳跃</p>
-            <p>📄 收集所有文件后到达出口即可下班！</p>
+            <p>📄 收集所有文件后到达出口前往下一层！</p>
+            <p>🏢 一共五层楼，每层规则不同！</p>
           </div>
         </div>
 

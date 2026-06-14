@@ -114,6 +114,38 @@ export interface ExitDoor {
   originalY: number;
 }
 
+export type FloorRule =
+  | 'none'
+  | 'no_jump'
+  | 'time_reverse'
+  | 'flip_controls'
+  | 'slow_motion'
+  | 'slippery';
+
+export interface FloorTheme {
+  id: string;
+  name: string;
+  subtitle: string;
+  bgTop: string;
+  bgBottom: string;
+  wallColor: string;
+  floorColor: string;
+  accentColor: string;
+  rule: FloorRule;
+  ruleDescription: string;
+  ruleHint: string;
+  icon: string;
+}
+
+export interface FloorTransition {
+  active: boolean;
+  phase: 'elevator_close' | 'moving' | 'elevator_open' | 'announce' | 'done';
+  timer: number;
+  fromFloor: number;
+  toFloor: number;
+  announcementAlpha: number;
+}
+
 export interface Level {
   platforms: Platform[];
   collectibles: Collectible[];
@@ -122,6 +154,8 @@ export interface Level {
   worldWidth: number;
   worldHeight: number;
   exitPositions: { x: number; y: number }[];
+  floorIndex: number;
+  floorTheme: FloorTheme;
 }
 
 export interface GameConfig {

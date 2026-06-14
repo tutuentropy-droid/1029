@@ -1,8 +1,9 @@
-import type { Player, Platform, Collectible, ExitDoor, Level, DreamRuleState, NPC, CameraState, CutsceneState, WorldShiftState, PersonalityState, HiddenArea, CustomRule } from './types';
+import type { Player, Platform, Collectible, ExitDoor, Level, DreamRuleState, NPC, CameraState, CutsceneState, WorldShiftState, PersonalityState, HiddenArea, CustomRule, FloorTransition, FloorTheme } from './types';
 import { COLORS, CANVAS_WIDTH, CANVAS_HEIGHT } from './config';
 import { getWalkPhase, getIdleBob, getWalkBob } from './Player';
 import { isPlatformVisible } from './dreamRules';
 import { isPlatformsInvisible, isRaining } from './customRules';
+import { FLOOR_THEMES } from './officeBuilding';
 
 export class GameRenderer {
   private ctx: CanvasRenderingContext2D;
@@ -12,7 +13,7 @@ export class GameRenderer {
     this.ctx = ctx;
   }
 
-  render(level: Level, player: Player, collectedCount: number, totalCount: number, time: number, dreamState: DreamRuleState | null, npcs: NPC[], camera: CameraState, cutscene: CutsceneState | null, worldShift: WorldShiftState | null, personality: PersonalityState | null, hiddenAreas: HiddenArea[], customRules: CustomRule[] = []): void {
+  render(level: Level, player: Player, collectedCount: number, totalCount: number, time: number, dreamState: DreamRuleState | null, npcs: NPC[], camera: CameraState, cutscene: CutsceneState | null, worldShift: WorldShiftState | null, personality: PersonalityState | null, hiddenAreas: HiddenArea[], customRules: CustomRule[] = [], floorTransition: FloorTransition | null = null): void {
     this.time = time;
     const ctx = this.ctx;
 
@@ -24,8 +25,8 @@ export class GameRenderer {
       ctx.scale(1, -1);
     }
 
-    this.drawBackground(worldShift);
-    this.drawWallDecorations(worldShift);
+    this.drawBackground(worldShift, level.floorTheme);
+    this.drawWallDecorations(worldShift, level.floorTheme);
 
     ctx.save();
     this.applyCameraTransform(camera);
@@ -95,6 +96,16 @@ export class GameRenderer {
     if (cutscene) {
       this.drawCutsceneMessage(cutscene);
     }
+
+    if (level.floorTheme.rule !== 'none') {
+      this.drawFloorRuleOverlay(level.floorTheme);
+    }
+
+    if (floorTransition && floorTransition.active) {
+      this.drawFloorTransition(floorTransition);
+    } else {
+      this.drawFloorIndicator(level.floorTheme);
+    }
   }
 
   private drawInvisiblePlatform(platform: Platform): void {
@@ -147,19 +158,21 @@ export class GameRenderer {
     ctx.translate(-CANVAS_WIDTH / 2 + camera.offsetX, -CANVAS_HEIGHT / 2 + camera.offsetY);
   }
 
-  private drawBackground(worldShift: WorldShiftState | null): void {
+  private drawBackground(worldShift: WorldShiftState | null, theme: FloorTheme): void {
     const ctx = this.ctx;
     const intensity = worldShift ? worldShift.dreamIntensity : 0.3;
     const colorShift = worldShift ? worldShift.colorShift : 0;
 
-    const topColor = this.shiftColor(COLORS.bgTop, colorShift * 20, intensity * 0.3);
-    const bottomColor = this.shiftColor(COLORS.bgBottom, colorShift * 15, intensity * 0.2);
+    const topColor = this.shiftColor(theme.bgTop, colorShift * 20, intensity * 0.3);
+    const bottomColor = this.shiftColor(theme.bgBottom, colorShift * 15, intensity * 0.2);
 
     const gradient = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
     gradient.addColorStop(0, topColor);
     gradient.addColorStop(1, bottomColor);
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+    this.drawFloorAtmosphere(theme);
 
     const waveAmplitude = 2 + intensity * 5;
     const waveSpeed = 0.1 + intensity * 0.1;
@@ -174,6 +187,89 @@ export class GameRenderer {
 
     if (intensity > 0.5) {
       this.drawDreamParticles(intensity);
+    }
+  }
+
+  private drawFloorAtmosphere(theme: FloorTheme): void {
+    const ctx = this.ctx;
+
+    switch (theme.id) {
+      case 'meeting':
+        for (let i = 0; i < 8; i++) {
+          const x = (i * 130 + this.time * 5) % (CANVAS_WIDTH + 100) - 50;
+          const y = 20 + Math.sin(this.time * 0.3 + i) * 10;
+          ctx.fillStyle = 'rgba(233, 69, 96, 0.12)';
+          ctx.fillRect(x, y, 100, 60);
+          ctx.strokeStyle = 'rgba(233, 69, 96, 0.3)';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(x, y, 100, 60);
+          ctx.fillStyle = 'rgba(255,255,255,0.15)';
+          ctx.beginPath();
+          for (let j = 0; j < 3; j++) {
+            ctx.arc(x + 20 + j * 30, y + 30, 5, 0, Math.PI * 2);
+          }
+          ctx.fill();
+        }
+        break;
+
+      case 'toilet':
+        for (let i = 0; i < 5; i++) {
+          const x = 100 + i * 180;
+          const mirrorY = 80 + Math.sin(this.time * 2 + i) * 5;
+          ctx.fillStyle = 'rgba(200, 230, 200, 0.3)';
+          ctx.strokeStyle = 'rgba(129, 199, 132, 0.6)';
+          ctx.lineWidth = 2;
+          ctx.fillRect(x, mirrorY, 60, 80);
+          ctx.strokeRect(x, mirrorY, 60, 80);
+          const reflection = Math.sin(this.time * 3 + i * 0.5) * 0.1;
+          ctx.fillStyle = `rgba(200, 255, 200, ${0.15 + reflection})`;
+          ctx.beginPath();
+          ctx.ellipse(x + 30, mirrorY + 40, 12, 18, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        break;
+
+      case 'printer':
+        for (let i = 0; i < 40; i++) {
+          const x = (i * 97 + this.time * 30) % CANVAS_WIDTH;
+          const y = (i * 73 + this.time * 50) % CANVAS_HEIGHT;
+          const rot = Math.sin(this.time + i) * 0.3;
+          ctx.save();
+          ctx.translate(x, y);
+          ctx.rotate(rot);
+          ctx.fillStyle = 'rgba(255,255,255,0.2)';
+          ctx.fillRect(-8, -5, 16, 10);
+          ctx.strokeStyle = 'rgba(150,150,150,0.15)';
+          ctx.lineWidth = 0.5;
+          ctx.strokeRect(-8, -5, 16, 10);
+          ctx.restore();
+        }
+        break;
+
+      case 'tea':
+        for (let i = 0; i < 6; i++) {
+          const x = 80 + i * 150;
+          const baseY = 100 + Math.sin(this.time * 0.5 + i) * 8;
+          ctx.strokeStyle = 'rgba(255, 179, 0, 0.25)';
+          ctx.lineWidth = 1.5;
+          for (let j = 0; j < 3; j++) {
+            const sx = x + j * 6;
+            const sy = baseY - j * 12 - Math.sin(this.time * 2 + i + j) * 3;
+            ctx.beginPath();
+            ctx.moveTo(sx, baseY);
+            ctx.quadraticCurveTo(sx + 3, sy + 5, sx - 2, sy);
+            ctx.stroke();
+          }
+        }
+        ctx.fillStyle = 'rgba(255, 179, 0, 0.08)';
+        for (let i = 0; i < 12; i++) {
+          const x = (i * 83 + this.time * 10) % CANVAS_WIDTH;
+          const y = (i * 57 + Math.sin(this.time + i) * 20) % CANVAS_HEIGHT;
+          ctx.beginPath();
+          ctx.arc(x, y, 3 + Math.sin(this.time * 3 + i) * 2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        break;
     }
   }
 
@@ -247,7 +343,7 @@ export class GameRenderer {
     }
   }
 
-  private drawWallDecorations(worldShift: WorldShiftState | null): void {
+  private drawWallDecorations(worldShift: WorldShiftState | null, theme: FloorTheme): void {
     const ctx = this.ctx;
     const intensity = worldShift ? worldShift.dreamIntensity : 0.3;
 
@@ -1617,5 +1713,181 @@ export class GameRenderer {
     ctx.fill();
 
     ctx.restore();
+  }
+
+  private drawFloorIndicator(theme: FloorTheme): void {
+    const ctx = this.ctx;
+    ctx.save();
+
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    const rx = CANVAS_WIDTH / 2 - 100;
+    const ry = 8;
+    const rw = 200;
+    const rh = 32;
+    ctx.beginPath();
+    ctx.moveTo(rx + 8, ry);
+    ctx.lineTo(rx + rw - 8, ry);
+    ctx.quadraticCurveTo(rx + rw, ry, rx + rw, ry + 8);
+    ctx.lineTo(rx + rw, ry + rh - 8);
+    ctx.quadraticCurveTo(rx + rw, ry + rh, rx + rw - 8, ry + rh);
+    ctx.lineTo(rx + 8, ry + rh);
+    ctx.quadraticCurveTo(rx, ry + rh, rx, ry + rh - 8);
+    ctx.lineTo(rx, ry + 8);
+    ctx.quadraticCurveTo(rx, ry, rx + 8, ry);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.strokeStyle = theme.accentColor;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.fillStyle = theme.accentColor;
+    ctx.font = 'bold 14px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`${theme.icon} ${theme.name}`, CANVAS_WIDTH / 2, ry + rh / 2);
+
+    ctx.restore();
+  }
+
+  private drawFloorRuleOverlay(theme: FloorTheme): void {
+    const ctx = this.ctx;
+    ctx.save();
+
+    const pulse = Math.sin(this.time * 3) * 0.15 + 0.85;
+    ctx.globalAlpha = pulse;
+
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+    const rx = CANVAS_WIDTH / 2 - 150;
+    const ry = CANVAS_HEIGHT - 45;
+    const rw = 300;
+    const rh = 35;
+    ctx.beginPath();
+    ctx.moveTo(rx + 8, ry);
+    ctx.lineTo(rx + rw - 8, ry);
+    ctx.quadraticCurveTo(rx + rw, ry, rx + rw, ry + 8);
+    ctx.lineTo(rx + rw, ry + rh - 8);
+    ctx.quadraticCurveTo(rx + rw, ry + rh, rx + rw - 8, ry + rh);
+    ctx.lineTo(rx + 8, ry + rh);
+    ctx.quadraticCurveTo(rx, ry + rh, rx, ry + rh - 8);
+    ctx.lineTo(rx, ry + 8);
+    ctx.quadraticCurveTo(rx, ry, rx + 8, ry);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.strokeStyle = theme.accentColor;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    ctx.fillStyle = theme.accentColor;
+    ctx.font = 'bold 13px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`⚠️ ${theme.ruleDescription}`, CANVAS_WIDTH / 2, ry + rh / 2);
+
+    ctx.restore();
+  }
+
+  private drawFloorTransition(transition: FloorTransition): void {
+    const ctx = this.ctx;
+
+    switch (transition.phase) {
+      case 'elevator_close': {
+        const progress = transition.timer / 0.6;
+        const doorWidth = (CANVAS_WIDTH / 2) * progress;
+        ctx.fillStyle = '#2C2C2C';
+        ctx.fillRect(0, 0, doorWidth, CANVAS_HEIGHT);
+        ctx.fillRect(CANVAS_WIDTH - doorWidth, 0, doorWidth, CANVAS_HEIGHT);
+
+        if (progress > 0.3) {
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+          ctx.font = 'bold 20px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('🛗', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
+        }
+        break;
+      }
+      case 'moving': {
+        ctx.fillStyle = '#2C2C2C';
+        ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+        const arrowY = CANVAS_HEIGHT / 2;
+        const arrowOffset = (transition.timer * 200) % 60;
+        ctx.fillStyle = '#FFD700';
+        ctx.font = 'bold 24px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        for (let i = 0; i < 3; i++) {
+          const y = arrowY - 40 + ((arrowOffset + i * 60) % 180) - 90;
+          ctx.globalAlpha = 0.3 + (1 - Math.abs(y - arrowY) / 90) * 0.7;
+          ctx.fillText('▲', CANVAS_WIDTH / 2, y);
+        }
+        ctx.globalAlpha = 1;
+
+        const floorNum = transition.toFloor + 1;
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = 'bold 32px sans-serif';
+        ctx.fillText(`${floorNum}F`, CANVAS_WIDTH / 2, arrowY);
+
+        break;
+      }
+      case 'elevator_open': {
+        const progress = transition.timer / 0.6;
+        const doorWidth = (CANVAS_WIDTH / 2) * (1 - progress);
+        ctx.fillStyle = '#2C2C2C';
+        ctx.fillRect(0, 0, doorWidth, CANVAS_HEIGHT);
+        ctx.fillRect(CANVAS_WIDTH - doorWidth, 0, doorWidth, CANVAS_HEIGHT);
+        break;
+      }
+      case 'announce': {
+        if (transition.announcementAlpha > 0) {
+          const targetTheme = FLOOR_THEMES[transition.toFloor];
+          ctx.save();
+          ctx.globalAlpha = transition.announcementAlpha;
+
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+          const rx = CANVAS_WIDTH / 2 - 200;
+          const ry = CANVAS_HEIGHT / 2 - 60;
+          const rw = 400;
+          const rh = 120;
+          ctx.beginPath();
+          ctx.moveTo(rx + 12, ry);
+          ctx.lineTo(rx + rw - 12, ry);
+          ctx.quadraticCurveTo(rx + rw, ry, rx + rw, ry + 12);
+          ctx.lineTo(rx + rw, ry + rh - 12);
+          ctx.quadraticCurveTo(rx + rw, ry + rh, rx + rw - 12, ry + rh);
+          ctx.lineTo(rx + 12, ry + rh);
+          ctx.quadraticCurveTo(rx, ry + rh, rx, ry + rh - 12);
+          ctx.lineTo(rx, ry + 12);
+          ctx.quadraticCurveTo(rx, ry, rx + 12, ry);
+          ctx.closePath();
+          ctx.fill();
+
+          ctx.strokeStyle = targetTheme.accentColor;
+          ctx.lineWidth = 3;
+          ctx.stroke();
+
+          ctx.fillStyle = targetTheme.accentColor;
+          ctx.font = 'bold 28px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(`${targetTheme.icon} ${targetTheme.name}`, CANVAS_WIDTH / 2, ry + 35);
+
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+          ctx.font = '16px sans-serif';
+          ctx.fillText(targetTheme.subtitle, CANVAS_WIDTH / 2, ry + 65);
+
+          if (targetTheme.rule !== 'none') {
+            ctx.fillStyle = '#FF6B6B';
+            ctx.font = 'bold 14px sans-serif';
+            ctx.fillText(`⚠️ ${targetTheme.ruleDescription}`, CANVAS_WIDTH / 2, ry + 92);
+          }
+
+          ctx.restore();
+        }
+        break;
+      }
+    }
   }
 }
